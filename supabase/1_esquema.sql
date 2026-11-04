@@ -70,10 +70,12 @@ begin
   return h;
 end $$;
 
-revoke all on function public.crear_hogar(text) from anon;
-revoke all on function public.unirse_hogar(text) from anon;
+revoke execute on function public.crear_hogar(text) from public, anon;
+revoke execute on function public.unirse_hogar(text) from public, anon;
+revoke execute on function public.es_miembro(uuid) from public, anon;
 grant execute on function public.crear_hogar(text) to authenticated;
 grant execute on function public.unirse_hogar(text) to authenticated;
+grant execute on function public.es_miembro(uuid) to authenticated;
 
 -- Cambios en vivo entre los dos teléfonos.
 alter table public.docs replica identity full;
