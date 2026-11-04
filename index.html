@@ -116,6 +116,9 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .amount{font-family:var(--f-display);font-size:34px;font-weight:800;text-align:center;padding:14px}
 .sw{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg);border-radius:14px;padding:12px}
 .fbar{margin:0 0 10px}
+.tasabox{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px solid var(--line)}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.three label{font-size:13px}
 .clrw{position:relative;display:block;width:100%}
 .clrw>input{padding-right:42px}
 .clrw>input.amount{padding-left:42px}
@@ -971,17 +974,18 @@ function rendSerie(acc){
   const movs=S.reg.filter(r=>r.a===acc.n).sort((a,b)=>a.f.localeCompare(b.f));
   const ints=movs.filter(esInteres), last=ints.length?ints[ints.length-1].f:null;
   const d0=last?nextDay(parse(last)):(acc.tasaDesde?parse(acc.tasaDesde):null); if(!d0) return null;
-  const t=today(), end=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1), ds=ymd(d0), rate=acc.tasa/100/365;
+  const t=today(), end=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1), ds=ymd(d0), r1=acc.tasa/100/365, r2=(acc.tasa2||0)/100/365, tope=acc.tope>0?acc.tope:Infinity;
   const mv=r=>r.t==='GASTO'?-r.m:r.m;
   let bal=acc.ini||0, i=0, tot=0; const days=[];
   for(;i<movs.length&&movs[i].f<ds;i++) bal+=mv(movs[i]);
   for(let d=d0; d<=end; d=nextDay(d)){
     const k=ymd(d); for(;i<movs.length&&movs[i].f<=k;i++) bal+=mv(movs[i]);
-    const g=Math.max(0,bal)*rate; bal+=g; tot+=g; days.push([k,g]);
+    const b=Math.max(0,bal), g=Math.min(b,tope)*r1+Math.max(0,b-tope)*r2; bal+=g; tot+=g; days.push([k,g]);
   }
   return {acc,desde:ds,last,days,tot};
 }
 const rendTodas=()=>S.deb.map(rendSerie).filter(Boolean);
+const tasaTxt=a=>a.tope>0?`${a.tasa}% hasta ${money0(a.tope)} y ${a.tasa2||0}% arriba`:`${a.tasa}% anual`;
 function rendPeriodo(P){
   const a=ymd(P.per.start), b=ymd(P.per.end);
   const est=rendTodas().map(x=>({acc:x.acc,m:x.days.filter(([k])=>k>=a&&k<=b).reduce((t,[,g])=>t+g,0),tot:x.tot,desde:x.desde})).filter(x=>x.m>0.005);
@@ -992,7 +996,7 @@ function vRendCard(P){
   const byAcc={}; R.reg.forEach(r=>{byAcc[r.a]=(byAcc[r.a]||0)+r.m});
   const rows=[
     ...Object.entries(byAcc).map(([a,m])=>`<div class="item"><div class="main"><b>${esc(a)}</b><span class="sub">Registrado</span></div><div class="rt"><span class="amt">${money(m)}</span>${okChip('Real')}</div></div>`),
-    ...R.est.map(x=>`<div class="item"><div class="main"><b>${esc(x.acc.n)}</b><span class="sub">Estimado al ${x.acc.tasa}% anual desde el ${fmtDay(parse(x.desde))}</span></div><div class="rt"><span class="amt">~${money(x.m)}</span><button class="mini" data-a="rendreg" data-acc="${esc(x.acc.n)}" data-m="${x.tot.toFixed(2)}">Registrar</button></div></div>`)
+    ...R.est.map(x=>`<div class="item"><div class="main"><b>${esc(x.acc.n)}</b><span class="sub">Estimado al ${tasaTxt(x.acc)} desde el ${fmtDay(parse(x.desde))}</span></div><div class="rt"><span class="amt">~${money(x.m)}</span><button class="mini" data-a="rendreg" data-acc="${esc(x.acc.n)}" data-m="${x.tot.toFixed(2)}">Registrar</button></div></div>`)
   ].join('');
   return `<section class="card"><div class="hd"><h2>Rendimientos ${infoI('rend')}</h2><b>${money0(R.tReg+R.tEst)}</b></div>
     <span class="sub" style="margin-top:-8px">Lo que ganan sus cuentas por tener el dinero ahí. Se queda en su ahorro: no suma a Ingresos ni al día a día.</span>
@@ -1001,14 +1005,20 @@ function vRendCard(P){
 function vRendAjustes(){
   const l=S.deb.filter(d=>!isVales(d.n));
   return `<section class="card"><h2>Rendimientos ${infoI('rend-tasa')}</h2><span class="sub" style="margin-top:-8px">Tasa anual de cada cuenta. Con eso la app estima cuánto ganan cada día con el saldo que tienen. Déjala vacía si la cuenta no paga.</span>
-    ${l.map((d,i)=>`<div class="field"><label for="tasa${i}">${esc(d.n)}: % anual</label><input id="tasa${i}" data-n="${esc(d.n)}" class="tasa" inputmode="decimal" value="${d.tasa>0?d.tasa:''}" placeholder="0"></div>`).join('')}
+    ${l.map((d,i)=>`<div class="tasabox"><b>${esc(d.n)}</b><div class="three">
+      <div class="field"><label for="tasa${i}">% anual</label><input id="tasa${i}" data-n="${esc(d.n)}" class="tasa" inputmode="decimal" value="${d.tasa>0?d.tasa:''}" placeholder="0"></div>
+      <div class="field"><label for="tope${i}">Tope $</label><input id="tope${i}" inputmode="decimal" value="${d.tope>0?d.tope:''}" placeholder="—"></div>
+      <div class="field"><label for="tas2${i}">% arriba</label><input id="tas2${i}" inputmode="decimal" value="${d.tasa2>0?d.tasa2:''}" placeholder="0"></div></div></div>`).join('')}
+    <span class="sub">Si la cuenta paga una tasa solo hasta cierto monto (como Mercado Pago), pon el tope y la tasa que paga por lo de arriba.</span>
     <button class="btn" data-a="savetasas">Guardar tasas</button></section>`;
 }
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]'); if(!el) return; const a=el.dataset.a;
   if(a==='savetasas'){ let bad=false;
     document.querySelectorAll('input.tasa').forEach(i=>{ const d=S.deb.find(x=>x.n===i.dataset.n); if(!d) return; const v=i.value.trim()===''?0:num(i.value);
-      if(!(v>=0&&v<=50)){bad=true;return} if(v>0&&!(d.tasa>0)&&!d.tasaDesde) d.tasaDesde=ymd(today()); if(v>0) d.tasa=v; else delete d.tasa; });
+      if(!(v>=0&&v<=50)){bad=true;return} if(v>0&&!(d.tasa>0)&&!d.tasaDesde) d.tasaDesde=ymd(today()); if(v>0) d.tasa=v; else delete d.tasa;
+      const j=i.id.slice(4), tp=$('#tope'+j).value.trim(), t2=$('#tas2'+j).value.trim(), tpv=tp===''?0:num(tp), t2v=t2===''?0:num(t2);
+      if(!(tpv>=0)||!(t2v>=0&&t2v<=50)){bad=true;return} if(tpv>0){d.tope=tpv;d.tasa2=t2v} else {delete d.tope;delete d.tasa2} });
     if(bad){toast('Usa tasas entre 0 y 50');return} save(); render(); toast('Tasas guardadas'); return }
   if(a==='rendreg'){ const m=(Math.round(+el.dataset.m*100)/100).toFixed(2);
     openSheet(null,{t:'INGRESO',d:{c:'INTERESES',k:'INTERESES',m,a:el.dataset.acc,f:ymd(today()),n:'Rendimiento estimado; cámbialo por el real si lo ves en el banco'}}); return }
