@@ -115,6 +115,14 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .amount{font-family:var(--f-display);font-size:34px;font-weight:800;text-align:center;padding:14px}
 .sw{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg);border-radius:14px;padding:12px}
+.fbar{margin:0 0 10px}
+.clrw{position:relative;display:block;width:100%}
+.clrw>input{padding-right:42px}
+.clrw>input.amount{padding-left:42px}
+.clr{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:0;border-radius:50%;background:transparent;color:var(--muted,#888);font-size:15px;line-height:30px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.clr span{display:flex;width:20px;height:20px;border-radius:50%;background:var(--line);color:var(--ink);font-size:12px;align-items:center;justify-content:center}
+.clrw>input:placeholder-shown+.clr{display:none}
+input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;display:none}
 .sw input{width:24px;height:24px;accent-color:var(--accent)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 12px);z-index:60;background:var(--ink);color:var(--bg);
   padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;max-width:90%;text-align:center}
@@ -261,7 +269,7 @@ const cap=s=>s?s.charAt(0)+s.slice(1).toLowerCase():s;
 
 /* ---------- UI state ---------- */
 const now=today();
-const ui={tab:'resumen',y:now.getDate()>12?new Date(now.getFullYear(),now.getMonth()+1,1).getFullYear():now.getFullYear(),m:now.getDate()>12?(now.getMonth()+1)%12:now.getMonth(),filter:'TODOS',q:'',sheet:null,confirm:false,toast:''};
+const ui={tab:'resumen',y:now.getDate()>12?new Date(now.getFullYear(),now.getMonth()+1,1).getFullYear():now.getFullYear(),m:now.getDate()>12?(now.getMonth()+1)%12:now.getMonth(),filter:'TODOS',acc:'',q:'',sheet:null,confirm:false,toast:''};
 
 const CORTE=12; /* periodo = del 13 al 12, como el corte de las tarjetas BBVA */
 function periodo(y,m){ return {start:new Date(y,m-1,CORTE+1), end:new Date(y,m,CORTE)} }
@@ -290,24 +298,49 @@ function chipFor(x){
   if(x.t==='GASTO') return o==='AMBOS'?'<span class="chip a">Compartido</span>':(o==='RAFA'?'<span class="chip r">Rafa</span>':'<span class="chip b">Rebe</span>');
   return o==='RAFA'?'<span class="chip r">Rafa</span>':(o==='REBE'?'<span class="chip b">Rebe</span>':'<span class="chip">Ambos</span>');
 }
+function accOpts(sel){
+  const usadas=new Set(S.reg.map(r=>r.a).filter(Boolean)), cre=S.cre.map(c=>c.n), deb=S.deb.map(d=>d.n);
+  const otras=[...usadas].filter(a=>!cre.includes(a)&&!deb.includes(a)).sort();
+  const o=l=>l.map(a=>`<option value="${esc(a)}" ${a===sel?'selected':''}>${esc(a)}</option>`).join('');
+  return `<optgroup label="Tarjetas de crédito">${o(cre)}</optgroup><optgroup label="Cuentas">${o(deb)}</optgroup>${otras.length?`<optgroup label="Otras">${o(otras)}</optgroup>`:''}`;
+}
+function accResumen(acc,esCard,rows){
+  let cargos=0, abonos=0;
+  for(const x of rows){
+    if(esCard&&x.c==='PAGO '+acc&&x.a!==acc){abonos+=Math.abs(x.m);continue}
+    if(x.t==='GASTO') cargos+=x.m; else if(x.m<0) cargos+=-x.m; else abonos+=x.m;
+  }
+  let msi=0, nm=0;
+  if(esCard){ try{ const P=monthPlan(ui.y,ui.m); for(const x of P.msi) if(x.x.t===acc){msi+=x.i.mens;nm++} }catch(e){} }
+  return `<section class="card"><div class="flow">
+    ${flowRow(esCard?'Compras y cargos':'Salidas',cargos,'','')}
+    ${esCard&&msi?flowRow('Mensualidades MSI ('+nm+')',msi,'',''):''}
+    ${flowRow(esCard?'Pagos a la tarjeta':'Entradas',abonos,'','')}
+  </div><span class="sub">${rows.length} movimiento${rows.length===1?'':'s'} del ${esc(periodoRango(ui.y,ui.m))}${esCard&&msi?'. Los MSI no aparecen en la lista, se cobran solos en el corte.':''}</span></section>`;
+}
 function vMovs(){
   let rows=monthRows().sort((a,b)=>b.f.localeCompare(a.f)||String(b.id).localeCompare(String(a.id)));
   const q=ui.q.trim().toLowerCase();
   if(ui.filter!=='TODOS'){
     rows=rows.filter(x=>{const o=owner(x);return ui.filter==='COMPARTIDO'?o==='AMBOS':(o===ui.filter||(o==='AMBOS'&&x.t==='GASTO'&&parts(x)[ui.filter==='RAFA'?0:1]>0&&false))});
   }
+  const acc=ui.acc||'', esCard=S.cre.some(c=>c.n===acc);
+  if(acc) rows=rows.filter(x=>x.a===acc||(esCard&&x.c==='PAGO '+acc));
   if(q) rows=rows.filter(x=>(x.c+' '+x.k+' '+x.a+' '+(x.n||'')).toLowerCase().includes(q));
   const groups={}; rows.forEach(x=>(groups[x.f]=groups[x.f]||[]).push(x));
   const F=[['TODOS','Todos'],['RAFA','Rafa'],['REBE','Rebe'],['COMPARTIDO','Compartidos']];
   return `<div class="wrap">${monthNav('Movimientos')}
   <div class="seg" role="group" aria-label="Filtro">${F.map(([k,l])=>`<button data-a="filter" data-v="${k}" aria-pressed="${ui.filter===k}">${l}</button>`).join('')}</div>
+  <div class="fbar"><select id="facc" aria-label="Cuenta o tarjeta"><option value="">Todas las cuentas y tarjetas</option>${accOpts(acc)}</select></div>
   <input id="q" type="search" placeholder="Buscar concepto, categoría o cuenta" value="${esc(ui.q)}" autocomplete="off">
-  ${rows.length?Object.keys(groups).map(d=>`<div class="day">${esc(fmtLong(parse(d)))}</div><section class="card" style="padding:4px 16px"><div class="list">${groups[d].map(x=>`<button class="item" data-a="edit" data-id="${esc(x.id)}"><div class="main"><b>${esc(x.c||'Sin concepto')}</b><span class="sub">${esc((x.k||'').toLowerCase())} · ${esc(x.a)}${x.por?' · por '+esc(cap(x.por)):''}</span></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="amt ${x.t==='GASTO'?'':(x.m>=0?'pos':'neg')}">${x.t==='GASTO'?'−':(x.m>=0?'+':'')}${money(Math.abs(x.m))}</span>${chipFor(x)}</div></button>`).join('')}</div></section>`).join(''):`<section class="card empty"><b>Nada por aquí</b>${q||ui.filter!=='TODOS'?'Prueba con otro filtro.':'Registra un gasto con el botón +.'}</section>`}
+  ${acc?accResumen(acc,esCard,rows):''}
+  ${rows.length?Object.keys(groups).map(d=>`<div class="day">${esc(fmtLong(parse(d)))}</div><section class="card" style="padding:4px 16px"><div class="list">${groups[d].map(x=>`<button class="item" data-a="edit" data-id="${esc(x.id)}"><div class="main"><b>${esc(x.c||'Sin concepto')}</b><span class="sub">${esc((x.k||'').toLowerCase())} · ${esc(x.a)}${x.por?' · por '+esc(cap(x.por)):''}</span></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="amt ${x.t==='GASTO'?'':(x.m>=0?'pos':'neg')}">${x.t==='GASTO'?'−':(x.m>=0?'+':'')}${money(Math.abs(x.m))}</span>${chipFor(x)}</div></button>`).join('')}</div></section>`).join(''):`<section class="card empty"><b>Nada por aquí</b>${q||acc||ui.filter!=='TODOS'?'Prueba con otro filtro.':'Registra un gasto con el botón +.'}</section>`}
   </div>`;
 }
 function vCuentas(){
   const groups=['RAFA','REBE','AMBOS'];
-  const deb=S.deb.map(a=>({a,s:saldo(a)}));
+  const RS={}; (typeof rendTodas==='function'?rendTodas():[]).forEach(x=>{RS[x.acc.n]=x.tot});
+  const deb=S.deb.map(a=>({a,s:saldo(a)+(RS[a.n]||0),est:RS[a.n]||0}));
   const total=deb.reduce((t,x)=>t+x.s,0);
   const up=upcoming(45);
   const nextOf=n=>up.find(u=>u.kind==='card'&&u.title==='Pago '+n);
@@ -316,7 +349,7 @@ function vCuentas(){
   <section class="card"><h2>Próximos pagos ${infoI('proximos')}</h2><span class="sub" style="margin-top:-8px">Siguientes 30 días: tarjetas (con MSI) y gastos fijos</span>
   ${up30.length?`<div class="list">${up30.map(u=>`<div class="item"><div class="main"><b>${esc(u.title)}</b><span class="sub">${fmtDay(u.date)}${u.note?' · '+esc(u.note):''}</span></div><span class="amt">${money0(u.total)}</span></div>`).join('')}</div>`:`<div class="empty">No hay pagos próximos.</div>`}</section>
   <section class="card hero"><span class="sub">Dinero disponible en débito</span><div class="big">${money0(total)}</div><span class="sub">Calculado con el saldo inicial y tus movimientos</span></section>
-  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)} ${infoI('debito')}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b></div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
+  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)} ${infoI('debito')}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b>${x.est>0.005?`<span class="sub">Incluye ~${money(x.est)} de rendimiento estimado</span>`:''}</div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
   <section class="card"><h2>Tarjetas de crédito ${infoI('tarjetas')}</h2><div class="list">${S.cre.map(c=>{const n=nextOf(c.n);return `<div class="item"><div class="main"><b>${esc(c.n)}</b><span class="sub">${c.corte?'Corte día '+c.corte+' · pago día '+c.pago:'Sin fechas de corte'}</span></div><div style="text-align:right"><span class="amt">${n?money0(n.total):'—'}</span><div class="sub">${n?'el '+fmtDay(n.date):'sin pago próximo'}</div></div></div>`}).join('')}</div></section></div>`;
 }
 function vMsi(){
@@ -348,6 +381,7 @@ function vAjustes(){
   <section class="card"><h2>Meta de ahorro</h2><span class="sub">Qué porcentaje de lo que entra quieren guardar cada mes. Tu Excel usaba 10%.</span>
     <div class="field"><label for="meta">Ahorrar %</label><input id="meta" inputmode="decimal" value="${Math.round(S.metaPct*100)}"></div>
     <button class="btn" data-a="savemeta">Guardar meta</button></section>
+  ${vRendAjustes()}
   ${typeof vExtraAjustes==='function'?vExtraAjustes():''}
   <section class="card"><h2>Respaldo</h2><span class="sub">Tus datos viven en este dispositivo. Guarda un respaldo de vez en cuando.</span>
     <div class="btns"><button class="btn" data-a="export">Guardar respaldo</button><button class="btn ghost" data-a="copy">Copiar respaldo</button></div>
@@ -600,11 +634,31 @@ document.addEventListener('input',e=>{
   if(ui.sheet&&ui.sheet.kind==='mov'&&e.target.closest('#f')) updateSheet();
 });
 document.addEventListener('change',e=>{
+  if(e.target.id==='facc'){ui.acc=e.target.value;render();return}
   const sh=ui.sheet; if(!sh||sh.kind!=='mov'||!e.target.closest('#f')) return;
   if(e.target.id==='a') sh.touched.a=true; if(e.target.id==='s') sh.touched.s=true;
   if(e.target.id==='c'&&!sh.edit) applyConcept(e.target.value.trim().toUpperCase());
   updateSheet();
 });
+/* ---------- tachecito para borrar lo escrito ---------- */
+const CLR_SKIP=/^(date|hidden|checkbox|radio|range|color|file|submit|button)$/;
+function addClears(root){
+  (root||document).querySelectorAll('input:not([data-clr])').forEach(i=>{
+    if(CLR_SKIP.test(i.type)||i.readOnly||i.disabled) return;
+    i.dataset.clr='1'; if(!i.placeholder) i.placeholder=' ';
+    const w=document.createElement('span'); w.className='clrw'; i.parentNode.insertBefore(w,i); w.appendChild(i);
+    const b=document.createElement('button'); b.type='button'; b.className='clr'; b.tabIndex=-1; b.setAttribute('aria-label','Borrar'); b.innerHTML='<span>✕</span>';
+    w.appendChild(b);
+  });
+}
+document.addEventListener('pointerdown',e=>{ if(e.target.closest('.clr')) e.preventDefault() });
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.clr'); if(!b) return; e.preventDefault(); e.stopPropagation();
+  const i=b.parentNode.querySelector('input'); if(!i) return;
+  i.value=''; i.focus(); i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new Event('change',{bubbles:true}));
+},true);
+new MutationObserver(()=>addClears()).observe(document.body,{childList:true,subtree:true});
+addClears();
 /* ---------- plan del mes: ingresos fijos, gastos fijos, MSI y día a día ---------- */
 const DEF_ING=[];
 const DEF_FIJ=[];
@@ -669,7 +723,7 @@ function msiCargo(x,i,k){
 function monthPlan(y,m){
   const per=periodo(y,m), pa=ymd(per.start), pb=ymd(per.end), key=y+'-'+pad(m+1), rows=S.reg.filter(r=>r.f>=pa&&r.f<=pb);
   const inP=d=>d>=per.start&&d<=per.end;
-  const used=new Set(); const P={y,m,key,ing:[],otros:[],fij:[],msi:[],vars:[],reem:[],valIn:[],valOtros:[],valG:[],rafa:{ing:0,gas:0},rebe:{ing:0,gas:0}};
+  const used=new Set(); const P={y,m,key,ing:[],otros:[],rend:[],fij:[],msi:[],vars:[],reem:[],valIn:[],valOtros:[],valG:[],rafa:{ing:0,gas:0},rebe:{ing:0,gas:0}};
   const addP=(arr,kind)=>{P.rafa[kind]+=arr[0];P.rebe[kind]+=arr[1]};
   // ingresos fijos (primero los normales, luego los extra)
   const items=[...S.ing].sort((a,b)=>(a.freq==='anual')-(b.freq==='anual'));
@@ -683,7 +737,7 @@ function monthPlan(y,m){
     if(isVales(it.cuenta)){ P.valIn.push({it,rec,pend,total}); continue }
     P.ing.push({it,rec,pend,total,extra:it.freq==='anual'}); addP(split(total,it.quien),'ing');
   }
-  for(const r of rows){ if(r.t==='INGRESO'&&!used.has(r)){ if(isVales(r.a)){P.valOtros.push(r);continue} P.otros.push(r); addP(split(r.m,titular(r.a)),'ing')} }
+  for(const r of rows){ if(r.t==='INGRESO'&&!used.has(r)){ if(isVales(r.a)){P.valOtros.push(r);continue} if(esInteres(r)){P.rend.push(r);continue} P.otros.push(r); addP(split(r.m,titular(r.a)),'ing')} }
   // gastos fijos
   const fset=new Set(S.fijos.map(f=>f.c));
   for(const f of S.fijos){
@@ -802,6 +856,7 @@ function vMes(){
     ${P.tValG?`<span class="sub">Lo que pagaron con vales (${money0(P.tValG)}) no cuenta aquí: sale de la bolsa de vales.</span>`:''}
   </section>
   ${vValesCard(P)}
+  ${vRendCard(P)}
   <section class="card"><div class="hd"><h2>Ingresos ${infoI('ingresos')}</h2><b>${money0(P.tIng)}</b></div>
     <span class="sub" style="margin-top:-8px">Recibido ${money0(P.tIngRec)} de ${money0(P.tIng)}</span>
     <div class="list">${ingRows.join('')||'<div class="empty">Sin ingresos en este periodo.</div>'}</div>
@@ -907,6 +962,58 @@ document.addEventListener('click',e=>{
   if(a==='savemeta'){const v=num($('#meta').value); if(!(v>=0&&v<=90)){toast('Usa un porcentaje entre 0 y 90');return} S.metaPct=v/100; save(); render(); toast('Meta guardada'); return}
 });
 
+/* ---------- rendimientos: lo que ganan las cuentas por tener dinero ---------- */
+const esInteres=r=>r.t==='INGRESO'&&/^(INTERES|RENDIMIENTO)/.test(r.c||'');
+const nextDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);
+// Saldo de cada día desde el último interés registrado, por la tasa anual / 365, con interés diario compuesto.
+function rendSerie(acc){
+  if(!(acc.tasa>0)) return null;
+  const movs=S.reg.filter(r=>r.a===acc.n).sort((a,b)=>a.f.localeCompare(b.f));
+  const ints=movs.filter(esInteres), last=ints.length?ints[ints.length-1].f:null;
+  const d0=last?nextDay(parse(last)):(acc.tasaDesde?parse(acc.tasaDesde):null); if(!d0) return null;
+  const t=today(), end=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1), ds=ymd(d0), rate=acc.tasa/100/365;
+  const mv=r=>r.t==='GASTO'?-r.m:r.m;
+  let bal=acc.ini||0, i=0, tot=0; const days=[];
+  for(;i<movs.length&&movs[i].f<ds;i++) bal+=mv(movs[i]);
+  for(let d=d0; d<=end; d=nextDay(d)){
+    const k=ymd(d); for(;i<movs.length&&movs[i].f<=k;i++) bal+=mv(movs[i]);
+    const g=Math.max(0,bal)*rate; bal+=g; tot+=g; days.push([k,g]);
+  }
+  return {acc,desde:ds,last,days,tot};
+}
+const rendTodas=()=>S.deb.map(rendSerie).filter(Boolean);
+function rendPeriodo(P){
+  const a=ymd(P.per.start), b=ymd(P.per.end);
+  const est=rendTodas().map(x=>({acc:x.acc,m:x.days.filter(([k])=>k>=a&&k<=b).reduce((t,[,g])=>t+g,0),tot:x.tot,desde:x.desde})).filter(x=>x.m>0.005);
+  return {reg:P.rend, est, tReg:P.rend.reduce((t,r)=>t+r.m,0), tEst:est.reduce((t,x)=>t+x.m,0)};
+}
+function vRendCard(P){
+  const R=rendPeriodo(P); if(!R.reg.length&&!R.est.length) return '';
+  const byAcc={}; R.reg.forEach(r=>{byAcc[r.a]=(byAcc[r.a]||0)+r.m});
+  const rows=[
+    ...Object.entries(byAcc).map(([a,m])=>`<div class="item"><div class="main"><b>${esc(a)}</b><span class="sub">Registrado</span></div><div class="rt"><span class="amt">${money(m)}</span>${okChip('Real')}</div></div>`),
+    ...R.est.map(x=>`<div class="item"><div class="main"><b>${esc(x.acc.n)}</b><span class="sub">Estimado al ${x.acc.tasa}% anual desde el ${fmtDay(parse(x.desde))}</span></div><div class="rt"><span class="amt">~${money(x.m)}</span><button class="mini" data-a="rendreg" data-acc="${esc(x.acc.n)}" data-m="${x.tot.toFixed(2)}">Registrar</button></div></div>`)
+  ].join('');
+  return `<section class="card"><div class="hd"><h2>Rendimientos ${infoI('rend')}</h2><b>${money0(R.tReg+R.tEst)}</b></div>
+    <span class="sub" style="margin-top:-8px">Lo que ganan sus cuentas por tener el dinero ahí. Se queda en su ahorro: no suma a Ingresos ni al día a día.</span>
+    <div class="list">${rows}</div></section>`;
+}
+function vRendAjustes(){
+  const l=S.deb.filter(d=>!isVales(d.n));
+  return `<section class="card"><h2>Rendimientos ${infoI('rend-tasa')}</h2><span class="sub" style="margin-top:-8px">Tasa anual de cada cuenta. Con eso la app estima cuánto ganan cada día con el saldo que tienen. Déjala vacía si la cuenta no paga.</span>
+    ${l.map((d,i)=>`<div class="field"><label for="tasa${i}">${esc(d.n)}: % anual</label><input id="tasa${i}" data-n="${esc(d.n)}" class="tasa" inputmode="decimal" value="${d.tasa>0?d.tasa:''}" placeholder="0"></div>`).join('')}
+    <button class="btn" data-a="savetasas">Guardar tasas</button></section>`;
+}
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-a]'); if(!el) return; const a=el.dataset.a;
+  if(a==='savetasas'){ let bad=false;
+    document.querySelectorAll('input.tasa').forEach(i=>{ const d=S.deb.find(x=>x.n===i.dataset.n); if(!d) return; const v=i.value.trim()===''?0:num(i.value);
+      if(!(v>=0&&v<=50)){bad=true;return} if(v>0&&!(d.tasa>0)&&!d.tasaDesde) d.tasaDesde=ymd(today()); if(v>0) d.tasa=v; else delete d.tasa; });
+    if(bad){toast('Usa tasas entre 0 y 50');return} save(); render(); toast('Tasas guardadas'); return }
+  if(a==='rendreg'){ const m=(Math.round(+el.dataset.m*100)/100).toFixed(2);
+    openSheet(null,{t:'INGRESO',d:{c:'INTERESES',k:'INTERESES',m,a:el.dataset.acc,f:ymd(today()),n:'Rendimiento estimado; cámbialo por el real si lo ves en el banco'}}); return }
+});
+
 /* ---------- cuentas claras: quién le paga a quién en el periodo ---------- */
 const otro=w=>w==='RAFA'?'REBE':'RAFA';
 const esPersona=w=>w==='RAFA'||w==='REBE';
@@ -983,6 +1090,8 @@ const INFO={
   'claras-rebe':['Pagó Rebe, le toca a Rafa','Gastos que salieron de cuentas o tarjetas de Rebe y en los que Rafa tiene una parte. Se muestra solo la parte de Rafa.'],
   'claras-rafa':['Pagó Rafa, le toca a Rebe','Gastos que salieron de cuentas o tarjetas de Rafa y en los que Rebe tiene una parte, más ingresos de Rafa que le llegaron a Rebe (como lo de Bere).'],
   'claras-pagos':['Pagos entre ustedes','Dinero que ya se pasaron: transferencias de una cuenta de Rafa a una de Rebe (o al revés) y reembolsos de gastos fijos como la renta. Para registrar uno, usen “Transferencia” en el botón +.'],
+  'rend':['Rendimientos','Intereses que les pagan las cuentas. “Real” es lo que ya registraron; “estimado” lo calcula la app con el saldo de cada día y la tasa de la cuenta, desde el último interés registrado. Como se queda en su ahorro, no cuenta para lo que pueden gastar. Cuando vean el monto real en el banco, toquen Registrar y pónganlo; la estimación vuelve a empezar desde ese día.'],
+  'rend-tasa':['Tasa anual','La tasa que la cuenta paga al año (por ejemplo Nu 13%). La app estima: saldo del día × tasa ÷ 365, todos los días. Si registran movimientos tarde, la estimación se recalcula sola con los saldos correctos.'],
   'proximos':['Próximos pagos','Lo que tienen que pagar en los siguientes 30 días: tarjetas (con sus MSI) y gastos fijos.'],
   'debito':['Saldos','Calculado por la app: saldo inicial más lo que entra menos lo que sale de cada cuenta. Si no coincide con el banco, falta registrar algún movimiento.'],
   'tarjetas':['Tarjetas de crédito','Día de corte, día de pago y el próximo pago estimado de cada tarjeta.'],
