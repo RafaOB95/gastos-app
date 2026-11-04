@@ -254,11 +254,15 @@ const cap=s=>s?s.charAt(0)+s.slice(1).toLowerCase():s;
 
 /* ---------- UI state ---------- */
 const now=today();
-const ui={tab:'resumen',y:now.getFullYear(),m:now.getMonth(),filter:'TODOS',q:'',sheet:null,confirm:false,toast:''};
+const ui={tab:'resumen',y:now.getDate()>12?new Date(now.getFullYear(),now.getMonth()+1,1).getFullYear():now.getFullYear(),m:now.getDate()>12?(now.getMonth()+1)%12:now.getMonth(),filter:'TODOS',q:'',sheet:null,confirm:false,toast:''};
 
+const CORTE=12; /* periodo = del 13 al 12, como el corte de las tarjetas BBVA */
+function periodo(y,m){ return {start:new Date(y,m-1,CORTE+1), end:new Date(y,m,CORTE)} }
+function periodoDe(ds){ const d=parse(ds); const n=d.getDate()>CORTE?new Date(d.getFullYear(),d.getMonth()+1,1):d; return [n.getFullYear(),n.getMonth()] }
+const periodoRango=(y,m)=>{const p=periodo(y,m); return fmtDay(p.start)+' – '+fmtDay(p.end)};
 const monthStr=()=>ui.y+'-'+pad(ui.m+1);
 const monthLabel=()=>{const l=new Date(ui.y,ui.m,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return l.charAt(0).toUpperCase()+l.slice(1)};
-const monthRows=()=>S.reg.filter(r=>monthKey(r.f)===monthStr());
+const monthRows=()=>{const p=periodo(ui.y,ui.m),a=ymd(p.start),b=ymd(p.end); return S.reg.filter(r=>r.f>=a&&r.f<=b)};
 
 const ICON={
   resumen:'<path d="M4 13h4v7H4zM10 4h4v16h-4zM16 9h4v11h-4z"/>',
@@ -271,7 +275,7 @@ const TABS=[['resumen','Mes'],['movs','Movimientos'],['cuentas','Cuentas'],['msi
 
 /* ---------- vistas ---------- */
 function monthNav(title){
-  return `<div class="top"><h1>${title}</h1><div class="month"><button data-a="prev" aria-label="Mes anterior">‹</button><span>${esc(monthLabel())}</span><button data-a="next" aria-label="Mes siguiente">›</button></div></div>`;
+  return `<div class="top"><h1>${title}</h1><div class="month"><button data-a="prev" aria-label="Mes anterior">‹</button><span>${esc(periodoRango(ui.y,ui.m))}</span><button data-a="next" aria-label="Mes siguiente">›</button></div></div>`;
 }
 function chipFor(x){
   const o=owner(x);
@@ -485,7 +489,7 @@ function saveMov(another){
     const row={id:'n'+Date.now(),f:v.f,t:T,c:v.c,k:v.k||v.c,m:abs,a:v.a,s:T==='GASTO'?v.s:'NO',n}; if(T==='GASTO'&&v.de) row.de=v.de;
     S.reg.push(stamp(row)); S.reg.sort((a,b)=>a.f.localeCompare(b.f)||(a.ts||0)-(b.ts||0));
   }
-  save(); ui.y=+v.f.slice(0,4); ui.m=+v.f.slice(5,7)-1;
+  save(); [ui.y,ui.m]=periodoDe(v.f);
   if(another&&!sh.edit){
     sh.d=newData(T,{f:v.f,a:v.a,a2:v.a2,card:v.card,s:v.s,de:v.de}); sh.kAuto=''; renderSheet(); toast('Guardado. Sigue con el siguiente'); render();
   }else{
@@ -631,14 +635,28 @@ function isVales(acc){ if(!acc) return false; const d=S.deb.find(x=>x.n===acc); 
 const valesLabel=a=>cap(String(a).replace(/^VALES\s*/i,''))||'Vales';
 function split(v,who){return who==='RAFA'?[v,0]:who==='REBE'?[0,v]:[v/2,v/2]}
 
+function occP(it,p){
+  if(it.freq==='manual') return (it.desde&&p.end<parse(it.desde))?[]:[null];
+  const seen=new Set(), out=[];
+  for(const d of [...occ(it,p.start.getFullYear(),p.start.getMonth()),...occ(it,p.end.getFullYear(),p.end.getMonth())]){
+    if(!d||d<p.start||d>p.end||seen.has(+d)) continue; seen.add(+d); out.push(d) }
+  return out;
+}
+function fijoFecha(f,p){ const b=(f.dia||1)>CORTE?p.start:p.end; return new Date(b.getFullYear(),b.getMonth(),Math.min(f.dia||1,dim(b.getFullYear(),b.getMonth()))) }
+function msiCargo(x,i,k){
+  const pay=addM(i.first,k), card=S.cre.find(c=>c.n===x.t);
+  if(card&&card.corte&&card.pago) return new Date(pay.getFullYear(),pay.getMonth()-(card.pago>card.corte?0:1),card.corte);
+  return pay;
+}
 function monthPlan(y,m){
-  const key=y+'-'+pad(m+1), rows=S.reg.filter(r=>monthKey(r.f)===key);
+  const per=periodo(y,m), pa=ymd(per.start), pb=ymd(per.end), key=y+'-'+pad(m+1), rows=S.reg.filter(r=>r.f>=pa&&r.f<=pb);
+  const inP=d=>d>=per.start&&d<=per.end;
   const used=new Set(); const P={y,m,key,ing:[],otros:[],fij:[],msi:[],vars:[],reem:[],valIn:[],valOtros:[],valG:[],rafa:{ing:0,gas:0},rebe:{ing:0,gas:0}};
   const addP=(arr,kind)=>{P.rafa[kind]+=arr[0];P.rebe[kind]+=arr[1]};
   // ingresos fijos (primero los normales, luego los extra)
   const items=[...S.ing].sort((a,b)=>(a.freq==='anual')-(b.freq==='anual'));
   for(const it of items){
-    const oc=occ(it,y,m).sort((a,b)=>(a&&b)?a-b:0);
+    const oc=occP(it,per).sort((a,b)=>(a&&b)?a-b:0);
     const rec=rows.filter(r=>r.t==='INGRESO'&&!used.has(r)&&r.c===it.c&&(r.a===it.cuenta||titular(r.a)===it.quien||isAmb(titular(r.a))));
     if(!oc.length&&!rec.length) continue;
     rec.forEach(r=>used.add(r));
@@ -651,16 +669,16 @@ function monthPlan(y,m){
   // gastos fijos
   const fset=new Set(S.fijos.map(f=>f.c));
   for(const f of S.fijos){
-    if(f.desde&&new Date(y,m+1,0)<parse(f.desde)) continue;
+    if(f.desde&&per.end<parse(f.desde)) continue;
     const ft=titular(f.cuenta);
     const paid=rows.filter(r=>r.t==='GASTO'&&r.c===f.c&&(isAmb(ft)||titular(r.a)===ft||r.a===f.cuenta));
     const amt=paid.length?paid.reduce((t,r)=>t+r.m,0):f.m;
-    P.fij.push({f,paid,amt,date:new Date(y,m,Math.min(f.dia||1,dim(y,m)))});
+    P.fij.push({f,paid,amt,date:fijoFecha(f,per)});
     {const pr=typeof f.pr==='number'?f.pr:S.pctCasa; addP(f.s==='NO'?split(amt,ft):[amt*pr,amt*(1-pr)],'gas');}
   }
   // MSI con mensualidad en este mes
   for(const x of S.msi){ const i=msiInfo(x);
-    for(let k=0;k<x.meses;k++){ const d=addM(i.first,k); if(same(d,y,m)){P.msi.push({x,i,n:k+1,date:d}); addP([i.rafa,i.rebe],'gas'); break} } }
+    for(let k=0;k<x.meses;k++){ const d=msiCargo(x,i,k); if(inP(d)){P.msi.push({x,i,n:k+1,date:d}); addP([i.rafa,i.rebe],'gas'); break} } }
   // día a día
   for(const r of rows){
     if(r.t==='GASTO'&&!fset.has(r.c)&&!PAGO_CATS.includes(r.k)){ if(isVales(r.a)){P.valG.push(r);continue} P.vars.push(r); addP(parts(r),'gas')}
@@ -676,8 +694,8 @@ function monthPlan(y,m){
   P.meta=P.tIng*S.metaPct;
   P.res=P.tIng-P.tFij-P.tMsi-P.tVar;
   P.disp=P.tIng-P.tFij-P.tMsi-P.meta;
-  const t=today(); P.cur=same(t,y,m); P.past=new Date(y,m+1,1)<=t;
-  P.daysLeft=P.cur?dim(y,m)-t.getDate()+1:0;
+  const t=today(); P.per=per; P.cur=inP(t); P.past=per.end<t;
+  P.daysLeft=P.cur?Math.round((per.end-t)/864e5)+1:0;
   return P;
 }
 
@@ -690,7 +708,7 @@ function vValesCard(P){
     const pend=[]; inn.forEach(x=>x.pend.forEach(d=>pend.push({it:x.it,d})));
     const uso=P.valG.filter(r=>r.a===acc.n).reduce((t,r)=>t+r.m,0);
     const sal=saldo(acc);
-    return `<div class="item"><div class="main"><b>${esc(valesLabel(acc.n))} · saldo ${money0(sal)}</b><span class="sub">Este mes: llegó ${money0(llego)}, usaron ${money0(uso)}${pend.length?' · próximo depósito '+(pend[0].d?fmtDay(pend[0].d):'')+' de '+money0(pend[0].it.m):''}</span></div>${pend.length?`<button class="mini" data-a="recibi" data-id="${esc(pend[0].it.id)}" data-d="${pend[0].d?ymd(pend[0].d):''}">Llegó</button>`:''}</div>`}).join('');
+    return `<div class="item"><div class="main"><b>${esc(valesLabel(acc.n))} · saldo ${money0(sal)}</b><span class="sub">Este periodo: llegó ${money0(llego)}, usaron ${money0(uso)}${pend.length?' · próximo depósito '+(pend[0].d?fmtDay(pend[0].d):'')+' de '+money0(pend[0].it.m):''}</span></div>${pend.length?`<button class="mini" data-a="recibi" data-id="${esc(pend[0].it.id)}" data-d="${pend[0].d?ymd(pend[0].d):''}">Llegó</button>`:''}</div>`}).join('');
   return `<section class="card"><h2>Vales</h2><span class="sub" style="margin-top:-8px">Bolsa aparte: no cuentan como ingreso y lo que pagan con ellos no se descuenta del día a día.</span><div class="list">${rows}</div></section>`;
 }
 const whoChip=w=>w==='RAFA'?'<span class="chip r">Rafa</span>':w==='REBE'?'<span class="chip b">Rebe</span>':'<span class="chip a">Los dos</span>';
@@ -698,8 +716,8 @@ const okChip=t=>`<span class="chip ok">✓ ${t}</span>`;
 function flowRow(label,val,cls,sign){return `<div class="fl ${cls||''}"><span>${label}</span><b>${sign||''}${money0(Math.abs(val))}</b></div>`}
 function histSvg(){
   const t=today(); const pts=[]; let [yy,mm]=PLAN_DESDE.split('-').map(Number); mm--;
-  while(new Date(yy,mm+1,1)<=t){ pts.push(monthPlan(yy,mm)); mm++; if(mm>11){mm=0;yy++} }
-  const L=pts.slice(-6); if(!L.length) return '<div class="empty">Aún no cierra ningún mes.</div>';
+  while(periodo(yy,mm).end<t){ pts.push(monthPlan(yy,mm)); mm++; if(mm>11){mm=0;yy++} }
+  const L=pts.slice(-6); if(!L.length) return '<div class="empty">Aún no cierra ningún periodo.</div>';
   const W=320,H=170,top=22,bot=30,mx=Math.max(1000,...L.map(p=>Math.abs(p.res)));
   const hasNeg=L.some(p=>p.res<0),hasPos=L.some(p=>p.res>0);
   const zero=hasNeg&&hasPos?top+(H-top-bot)/2:(hasNeg?top:H-bot);
@@ -711,7 +729,7 @@ function histSvg(){
     return `<rect x="${x}" y="${yb}" width="${bw}" height="${h}" rx="4" fill="${p.res>=0?'var(--good)':'var(--bad)'}" opacity="${p.cur?.5:1}"/>
     <text x="${x+bw/2}" y="${vy}" text-anchor="middle" class="sv">${(p.res<0?'−':'+')+Math.round(Math.abs(p.res)/100)/10+'k'}</text>
     <text x="${x+bw/2}" y="${H-8}" text-anchor="middle" class="sl">${lab}${p.cur?'*':''}</text>`}).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="hist" role="img" aria-label="Lo que sobró o faltó cada mes"><line x1="6" x2="${W-6}" y1="${zero}" y2="${zero}" class="z"/>${bars}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="hist" role="img" aria-label="Lo que sobró o faltó cada periodo"><line x1="6" x2="${W-6}" y1="${zero}" y2="${zero}" class="z"/>${bars}</svg>`;
 }
 function vMes(){
   const P=monthPlan(ui.y,ui.m);
@@ -731,7 +749,7 @@ function vMes(){
   const meta=Math.round(S.metaPct*100);
   return `<div class="wrap">${monthNav('Mes')}${vBanners()}
   ${P.past?`<section class="card hero">
-    <span class="sub">Así cerró ${esc(monthLabel().toLowerCase())}</span>
+    <span class="sub">Así cerró el periodo ${esc(monthLabel().toLowerCase().replace(/ de \d{4}$/,''))} (${esc(periodoRango(ui.y,ui.m))})</span>
     <div class="big ${sobra?'pos':'neg'}">${sobra?'Sobraron ':'Faltaron '}${money0(Math.abs(P.res))}</div>
     <div class="flow">
       ${flowRow('Ingresos',P.tIng,'',' ')}
@@ -768,17 +786,17 @@ function vMes(){
   ${vValesCard(P)}
   <section class="card"><div class="hd"><h2>Ingresos</h2><b>${money0(P.tIng)}</b></div>
     <span class="sub" style="margin-top:-8px">Recibido ${money0(P.tIngRec)} de ${money0(P.tIng)}</span>
-    <div class="list">${ingRows.join('')||'<div class="empty">Sin ingresos este mes.</div>'}</div>
+    <div class="list">${ingRows.join('')||'<div class="empty">Sin ingresos en este periodo.</div>'}</div>
     <button class="btn ghost" data-a="ingnew">Agregar ingreso fijo</button></section>
   <section class="card"><div class="hd"><h2>Gastos fijos</h2><b>${money0(P.tFij)}</b></div>
     <div class="list">${fijRows||'<div class="empty">Sin gastos fijos.</div>'}</div>
     <button class="btn ghost" data-a="fijnew">Agregar gasto fijo</button></section>
   <section class="card"><div class="hd"><h2>Mensualidades MSI</h2><b>${money0(P.tMsi)}</b></div>
-    <div class="list">${P.msi.map(x=>`<div class="item"><div class="main"><b>${esc(cap(x.x.c))}</b><span class="sub">Pago ${x.n} de ${x.x.meses} · ${esc(x.x.t)}</span></div><span class="amt">${money0(x.i.mens)}</span></div>`).join('')||'<div class="empty">Sin mensualidades este mes.</div>'}</div></section>
+    <div class="list">${P.msi.map(x=>`<div class="item"><div class="main"><b>${esc(cap(x.x.c))}</b><span class="sub">Pago ${x.n} de ${x.x.meses} · ${esc(x.x.t)}</span></div><span class="amt">${money0(x.i.mens)}</span></div>`).join('')||'<div class="empty">Sin mensualidades en este periodo.</div>'}</div></section>
   <section class="card"><h2>Cada quien</h2>
     ${[['RAFA','Rafa',P.rafa,'var(--rafa)'],['REBE','Rebe',P.rebe,'var(--rebe)']].map(([k,n,o,c])=>{const q=o.ing-o.gas;return `<div class="who2"><span class="dot" style="background:${c}"></span><div class="main"><b>${n}</b><span class="sub">Entra ${money0(o.ing)} · le toca ${money0(o.gas)}</span></div><b class="${q<0?'neg':'pos'}">${q<0?'−':'+'}${money0(Math.abs(q))}</b></div>`}).join('')}
     <span class="sub">“Le toca” es su parte de fijos, MSI y día a día según las reglas de reparto, sin importar quién pagó.</span></section>
-  <section class="card"><h2>Mes por mes</h2><span class="sub" style="margin-top:-8px">Meses ya cerrados desde que viven juntos</span>${histSvg()}</section>
+  <section class="card"><h2>Periodo por periodo</h2><span class="sub" style="margin-top:-8px">Periodos ya cerrados (del 13 al 12) desde que viven juntos</span>${histSvg()}</section>
   </div>`;
 }
 
@@ -820,7 +838,7 @@ function saveIng(){
   if((d.freq==='mensual'||d.freq==='anual')&&!(dia>=1&&dia<=31)){toast('Escribe un día entre 1 y 31');return}
   if((d.freq==='catorcenal'||d.freq==='cada28')&&!d.ancla){toast('Elige la fecha de un pago');return}
   const o={id:d.id||('i'+Date.now()),c:d.c,k:d.k||d.c,quien:d.quien,m,freq:d.freq,cuenta:d.cuenta};
-  if(d.desde) o.desde=d.desde; else if(!ui.sheet.edit) o.desde=ymd(new Date(ui.y,ui.m,1));
+  if(d.desde) o.desde=d.desde; else if(!ui.sheet.edit) o.desde=ymd(periodo(ui.y,ui.m).start);
   if(d.freq==='mensual'){o.dia=dia; if(d.finde==='antes') o.finde='antes'} if(d.freq==='anual'){o.dia=dia;o.mes=+d.mes;o.k='EXTRA'} if(d.freq==='catorcenal'||d.freq==='cada28') o.ancla=d.ancla;
   const i=S.ing.findIndex(x=>x.id===o.id); if(i>=0) S.ing[i]=o; else S.ing.push(o);
   save(); ui.sheet=null; renderSheet(); render(); toast('Ingreso fijo guardado');
@@ -846,19 +864,19 @@ function saveFij(){
   if(!c){toast('Ponle nombre al gasto');return} if(!(m>0)){toast('Escribe el monto');return} if(!(dia>=1&&dia<=31)){toast('Escribe un día entre 1 y 31');return}
   const o={id:ui.sheet.data.id||('f'+Date.now()),c,k:g('gk').value.trim().toUpperCase()||'SERVICIOS',m,dia,cuenta:g('ga').value,s:g('gs').checked?'SÍ':'NO',variable:g('gv').checked};
   {const v=g('gpr').value.trim(); if(v){const n=num(v); if(!(n>=0&&n<=100)){toast('La parte de Rafa va de 0 a 100');return} o.pr=Math.round(n*10)/1000}}
-  if(ui.sheet.data.desde) o.desde=ui.sheet.data.desde; else if(!ui.sheet.edit) o.desde=ymd(new Date(ui.y,ui.m,1));
+  if(ui.sheet.data.desde) o.desde=ui.sheet.data.desde; else if(!ui.sheet.edit) o.desde=ymd(periodo(ui.y,ui.m).start);
   const i=S.fijos.findIndex(x=>x.id===o.id); if(i>=0) S.fijos[i]=o; else S.fijos.push(o);
   save(); ui.sheet=null; renderSheet(); render(); toast('Gasto fijo guardado');
 }
 function prefDate(ds){const t=today(); if(ds){const d=parse(ds); if(d<=t) return ds}
-  const inView=new Date(ui.y,ui.m,1); return (new Date(ui.y,ui.m+1,1)<=t)?ymd(new Date(ui.y,ui.m,Math.min(dim(ui.y,ui.m),15))):ymd(t)}
+  const per=periodo(ui.y,ui.m); return per.end<t?ymd(per.end):ymd(t)}
 
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-a]'); if(!el) return; const a=el.dataset.a;
   if(a==='recibi'){const it=S.ing.find(x=>x.id===el.dataset.id); if(!it) return;
     openSheet(null,{t:'INGRESO',d:{c:it.c,k:it.k,a:it.cuenta,m:String(it.m),f:prefDate(el.dataset.d)}}); return}
   if(a==='pague'){const f=S.fijos.find(x=>x.id===el.dataset.id); if(!f) return;
-    const ds=ymd(new Date(ui.y,ui.m,Math.min(f.dia||1,dim(ui.y,ui.m))));
+    const ds=ymd(fijoFecha(f,periodo(ui.y,ui.m)));
     openSheet(null,{t:'GASTO',d:{c:f.c,k:f.k,a:f.cuenta,m:String(f.m),s:f.s,f:prefDate(ds)}}); return}
   if(a==='ingnew'){ui.sheet={kind:'ing',edit:false,confirm:false,data:{c:'',quien:'RAFA',m:'',freq:'mensual',dia:'',cuenta:(S.deb[0]||{}).n||''}};renderSheet();return}
   if(a==='ingedit'){const it=S.ing.find(x=>x.id===el.dataset.id); ui.sheet={kind:'ing',edit:true,confirm:false,data:Object.assign(clone(it),{m:String(it.m)})};renderSheet();return}
