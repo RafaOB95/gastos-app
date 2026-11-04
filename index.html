@@ -118,6 +118,10 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .fbar{margin:0 0 10px}
 .tasabox{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px solid var(--line)}
 .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.apt[hidden]{display:none}
+.apt{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr);gap:8px}
+.apt label{font-size:13px}
+.apt-l{display:flex;justify-content:space-between;gap:8px}
 .three label{font-size:13px}
 .clrw{position:relative;display:block;width:100%}
 .clrw>input{padding-right:42px}
@@ -343,7 +347,7 @@ function vMovs(){
 function vCuentas(){
   const groups=['RAFA','REBE','AMBOS'];
   const RS={}; (typeof rendTodas==='function'?rendTodas():[]).forEach(x=>{RS[x.acc.n]=x.tot});
-  const deb=S.deb.map(a=>({a,s:saldo(a)+(RS[a.n]||0),est:RS[a.n]||0}));
+  const deb=S.deb.map(a=>({a,s:Math.round((saldo(a)+(RS[a.n]||0))*100)/100+0,est:RS[a.n]||0}));
   const total=deb.reduce((t,x)=>t+x.s,0);
   const up=upcoming(45);
   const nextOf=n=>up.find(u=>u.kind==='card'&&u.title==='Pago '+n);
@@ -352,7 +356,7 @@ function vCuentas(){
   <section class="card"><h2>Próximos pagos ${infoI('proximos')}</h2><span class="sub" style="margin-top:-8px">Siguientes 30 días: tarjetas (con MSI) y gastos fijos</span>
   ${up30.length?`<div class="list">${up30.map(u=>`<div class="item"><div class="main"><b>${esc(u.title)}</b><span class="sub">${fmtDay(u.date)}${u.note?' · '+esc(u.note):''}</span></div><span class="amt">${money0(u.total)}</span></div>`).join('')}</div>`:`<div class="empty">No hay pagos próximos.</div>`}</section>
   <section class="card hero"><span class="sub">Dinero disponible en débito</span><div class="big">${money0(total)}</div><span class="sub">Calculado con el saldo inicial y tus movimientos</span></section>
-  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)} ${infoI('debito')}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b>${x.est>0.005?`<span class="sub">Incluye ~${money(x.est)} de rendimiento estimado</span>`:''}</div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
+  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)} ${infoI('debito')}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b>${(typeof apartados==='function'?apartados(x.a,x.s):[]).map(p=>`<span class="sub apt-l"><span>${esc(p.n)} · ${p.t}%</span><span>${money(p.m)}</span></span>`).join('')}${x.est>0.005?`<span class="sub">Incluye ~${money(x.est)} de rendimiento estimado</span>`:''}</div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
   <section class="card"><h2>Tarjetas de crédito ${infoI('tarjetas')}</h2><div class="list">${S.cre.map(c=>{const n=nextOf(c.n);return `<div class="item"><div class="main"><b>${esc(c.n)}</b><span class="sub">${c.corte?'Corte día '+c.corte+' · pago día '+c.pago:'Sin fechas de corte'}</span></div><div style="text-align:right"><span class="amt">${n?money0(n.total):'—'}</span><div class="sub">${n?'el '+fmtDay(n.date):'sin pago próximo'}</div></div></div>`}).join('')}</div></section></div>`;
 }
 function vMsi(){
@@ -647,7 +651,7 @@ document.addEventListener('change',e=>{
 const CLR_SKIP=/^(date|hidden|checkbox|radio|range|color|file|submit|button)$/;
 function addClears(root){
   (root||document).querySelectorAll('input:not([data-clr])').forEach(i=>{
-    if(CLR_SKIP.test(i.type)||i.readOnly||i.disabled) return;
+    if(CLR_SKIP.test(i.type)||i.readOnly||i.disabled||i.dataset.noclr) return;
     i.dataset.clr='1'; if(!i.placeholder) i.placeholder=' ';
     const w=document.createElement('span'); w.className='clrw'; i.parentNode.insertBefore(w,i); w.appendChild(i);
     const b=document.createElement('button'); b.type='button'; b.className='clr'; b.tabIndex=-1; b.setAttribute('aria-label','Borrar'); b.innerHTML='<span>✕</span>';
@@ -985,6 +989,13 @@ function rendSerie(acc){
   }
   return {acc,desde:ds,last,days,tot};
 }
+// En qué apartado está el dinero: lo primero llena el apartado con tope y el resto queda en el segundo.
+function apartados(acc,saldo){
+  if(!(acc.tasa>0)&&!acc.nom1) return [];
+  const b=Math.max(0,saldo), n1=acc.nom1||(acc.tope>0?'Al '+acc.tasa+'%':''), n2=acc.nom2||('Al '+(acc.tasa2||0)+'%');
+  if(!(acc.tope>0)) return n1?[{n:n1,m:b,t:acc.tasa||0}]:[];
+  const L=[{n:n1,m:Math.min(b,acc.tope),t:acc.tasa||0,lleno:b>=acc.tope}]; if(b>acc.tope) L.push({n:n2,m:b-acc.tope,t:acc.tasa2||0}); return L;
+}
 const rendTodas=()=>S.deb.map(rendSerie).filter(Boolean);
 const tasaTxt=a=>a.tope>0?`${a.tasa}% hasta ${money0(a.tope)} y ${a.tasa2||0}% arriba`:`${a.tasa}% anual`;
 function rendPeriodo(P){
@@ -1006,11 +1017,13 @@ function vRendCard(P){
 function vRendAjustes(){
   const l=S.deb.filter(d=>!isVales(d.n));
   return `<section class="card"><h2>Rendimientos ${infoI('rend-tasa')}</h2><span class="sub" style="margin-top:-8px">Tasa anual de cada cuenta. Con eso la app estima cuánto ganan cada día con el saldo que tienen. Déjala vacía si la cuenta no paga.</span>
-    ${l.map((d,i)=>`<div class="tasabox"><b>${esc(d.n)}</b><div class="three">
-      <div class="field"><label for="tasa${i}">% anual</label><input id="tasa${i}" data-n="${esc(d.n)}" class="tasa" inputmode="decimal" value="${d.tasa>0?d.tasa:''}" placeholder="0"></div>
-      <div class="field"><label for="tope${i}">Tope $</label><input id="tope${i}" inputmode="decimal" value="${d.tope>0?d.tope:''}" placeholder="—"></div>
-      <div class="field"><label for="tas2${i}">% arriba</label><input id="tas2${i}" inputmode="decimal" value="${d.tasa2>0?d.tasa2:''}" placeholder="0"></div></div></div>`).join('')}
-    <span class="sub">Si la cuenta paga una tasa solo hasta cierto monto (como Mercado Pago), pon el tope y la tasa que paga por lo de arriba.</span>
+    ${l.map((d,i)=>`<div class="tasabox"><b>${esc(d.n)}</b>
+      <div class="apt"><div class="field"><label for="nom1${i}">Apartado</label><input id="nom1${i}" value="${esc(d.nom1||'')}" placeholder="Ej. Cajita Turbo" autocomplete="off"></div>
+      <div class="field"><label for="tasa${i}">% anual</label><input id="tasa${i}" data-n="${esc(d.n)}" class="tasa" data-noclr="1" inputmode="decimal" value="${d.tasa>0?d.tasa:''}" placeholder="0"></div>
+      <div class="field"><label for="tope${i}">Tope $</label><input id="tope${i}" class="tope" data-noclr="1" inputmode="decimal" value="${d.tope>0?d.tope:''}" placeholder="—"></div></div>
+      <div class="apt" id="apt2${i}" ${d.tope>0?'':'hidden'}><div class="field"><label for="nom2${i}">Lo que pasa del tope</label><input id="nom2${i}" value="${esc(d.nom2||'')}" placeholder="Ej. Cajita normal" autocomplete="off"></div>
+      <div class="field"><label for="tas2${i}">% anual</label><input id="tas2${i}" data-noclr="1" inputmode="decimal" value="${d.tasa2>0?d.tasa2:''}" placeholder="0"></div><div></div></div></div>`).join('')}
+    <span class="sub">Si la cuenta paga una tasa solo hasta cierto monto (como la cajita Turbo de Nu), pon el tope y abajo dónde queda y cuánto paga lo que pasa de ahí. En Cuentas verán cuánto hay en cada apartado.</span>
     <button class="btn" data-a="savetasas">Guardar tasas</button></section>`;
 }
 document.addEventListener('click',e=>{
@@ -1019,11 +1032,13 @@ document.addEventListener('click',e=>{
     document.querySelectorAll('input.tasa').forEach(i=>{ const d=S.deb.find(x=>x.n===i.dataset.n); if(!d) return; const v=i.value.trim()===''?0:num(i.value);
       if(!(v>=0&&v<=50)){bad=true;return} if(v>0&&!(d.tasa>0)&&!d.tasaDesde) d.tasaDesde=ymd(today()); if(v>0) d.tasa=v; else delete d.tasa;
       const j=i.id.slice(4), tp=$('#tope'+j).value.trim(), t2=$('#tas2'+j).value.trim(), tpv=tp===''?0:num(tp), t2v=t2===''?0:num(t2);
-      if(!(tpv>=0)||!(t2v>=0&&t2v<=50)){bad=true;return} if(tpv>0){d.tope=tpv;d.tasa2=t2v} else {delete d.tope;delete d.tasa2} });
+      if(!(tpv>=0)||!(t2v>=0&&t2v<=50)){bad=true;return} if(tpv>0){d.tope=tpv;d.tasa2=t2v} else {delete d.tope;delete d.tasa2}
+      const n1=$('#nom1'+j).value.trim(), n2=$('#nom2'+j).value.trim(); if(n1) d.nom1=n1; else delete d.nom1; if(n2&&tpv>0) d.nom2=n2; else delete d.nom2; });
     if(bad){toast('Usa tasas entre 0 y 50');return} save(); render(); toast('Tasas guardadas'); return }
   if(a==='rendreg'){ const m=(Math.round(+el.dataset.m*100)/100).toFixed(2);
     openSheet(null,{t:'INGRESO',d:{c:'INTERESES',k:'INTERESES',m,a:el.dataset.acc,f:ymd(today()),n:'Rendimiento estimado; cámbialo por el real si lo ves en el banco'}}); return }
 });
+document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('tope')){ const r=document.getElementById('apt2'+e.target.id.slice(4)); if(r) r.hidden=!(num(e.target.value)>0) } });
 
 /* ---------- cuentas claras: quién le paga a quién en el periodo ---------- */
 const otro=w=>w==='RAFA'?'REBE':'RAFA';
