@@ -746,7 +746,7 @@ function msiCargo(x,i,k){
 function monthPlan(y,m){
   const per=periodo(y,m), pa=ymd(per.start), pb=ymd(per.end), key=y+'-'+pad(m+1), rows=S.reg.filter(r=>r.f>=pa&&r.f<=pb);
   const inP=d=>d>=per.start&&d<=per.end;
-  const used=new Set(); const P={y,m,key,ing:[],otros:[],rend:[],fij:[],msi:[],vars:[],reem:[],valIn:[],valOtros:[],valG:[],rafa:{ing:0,gas:0},rebe:{ing:0,gas:0}};
+  const used=new Set(); const P={y,m,key,ing:[],otros:[],rend:[],reemFij:[],fij:[],msi:[],vars:[],reem:[],valIn:[],valOtros:[],valG:[],rafa:{ing:0,gas:0},rebe:{ing:0,gas:0}};
   const addP=(arr,kind)=>{P.rafa[kind]+=arr[0];P.rebe[kind]+=arr[1]};
   // ingresos fijos (primero los normales, luego los extra)
   const items=[...S.ing].sort((a,b)=>(a.freq==='anual')-(b.freq==='anual'));
@@ -758,6 +758,7 @@ function monthPlan(y,m){
     const pend=oc.slice(rec.length);
     const total=rec.reduce((t,r)=>t+r.m,0)+pend.length*it.m;
     if(isVales(it.cuenta)){ P.valIn.push({it,rec,pend,total}); continue }
+    if(it.k==='REEMBOLSO'){ P.reemFij.push({it,rec,pend,total}); addP(split(total,it.quien).map(v=>-v),'gas'); continue } // te regresan parte de un gasto: no es ingreso
     P.ing.push({it,rec,pend,total,extra:it.freq==='anual'}); addP(split(total,it.quien),'ing');
   }
   for(const r of rows){ if(r.t==='INGRESO'&&!used.has(r)){ if(isVales(r.a)){P.valOtros.push(r);continue} if(esInteres(r)){P.rend.push(r);continue} P.otros.push(r); addP(split(r.m,titular(r.a)),'ing')} }
@@ -782,7 +783,7 @@ function monthPlan(y,m){
   const sum=(a,f)=>a.reduce((t,x)=>t+f(x),0);
   P.tIng=sum(P.ing,x=>x.total)+sum(P.otros,r=>r.m);
   P.tIngRec=sum(P.ing,x=>x.rec.reduce((t,r)=>t+r.m,0))+sum(P.otros,r=>r.m);
-  P.tFij=sum(P.fij,x=>x.amt);
+  P.tFij=sum(P.fij,x=>x.amt)-sum(P.reemFij,x=>x.total);
   P.tMsi=sum(P.msi,x=>x.i.mens);
   P.tVar=sum(P.vars,r=>r.m)-sum(P.reem,r=>r.m);
   P.tValG=sum(P.valG,r=>r.m);
@@ -838,6 +839,8 @@ function vMes(){
     x.pend.forEach(d=>ingRows.push(`<div class="item"><button class="main lk" data-a="ingedit" data-id="${esc(x.it.id)}"><b>${esc(cap(x.it.c))} ${whoChip(x.it.quien)}${x.extra?' <span class="chip">Extra</span>':''}</b><span class="sub">${d?'Esperado el '+fmtDay(d):'Sin fecha fija'} · ${money0(x.it.m)}</span></button><button class="mini" data-a="recibi" data-id="${esc(x.it.id)}" data-d="${d?ymd(d):''}">Recibí</button></div>`));
   });
   P.otros.forEach(r=>ingRows.push(`<div class="item"><div class="main"><b>${esc(cap(r.c))}</b><span class="sub">${fmtDay(parse(r.f))} · otro ingreso</span></div><div class="rt"><span class="amt">${money0(r.m)}</span>${okChip('Recibido')}</div></div>`));
+  const reemRows=P.reemFij.map(x=>[...x.rec.map(r=>`<div class="item"><button class="main lk" data-a="ingedit" data-id="${esc(x.it.id)}"><b>${esc(cap(x.it.c))} ${whoChip(x.it.quien)}</b><span class="sub">Te regresan · ${fmtDay(parse(r.f))}</span></button><div class="rt"><span class="amt pos">−${money0(r.m)}</span>${okChip('Recibido')}</div></div>`),
+    ...x.pend.map(d=>`<div class="item"><button class="main lk" data-a="ingedit" data-id="${esc(x.it.id)}"><b>${esc(cap(x.it.c))} ${whoChip(x.it.quien)}</b><span class="sub">Te regresan · ${d?'día '+d.getDate():'sin fecha'} · −${money0(x.it.m)}</span></button><button class="mini" data-a="recibi" data-id="${esc(x.it.id)}" data-d="${d?ymd(d):''}">Recibí</button></div>`)].join('')).join('');
   const fijRows=P.fij.map(x=>x.paid.length
     ?`<div class="item"><button class="main lk" data-a="fijedit" data-id="${esc(x.f.id)}"><b>${esc(cap(x.f.c))} ${x.f.s==='NO'?whoChip(titular(x.f.cuenta)):''}</b><span class="sub">Pagado ${fmtDay(parse(x.paid[0].f))}</span></button><div class="rt"><span class="amt">${money0(x.amt)}</span>${okChip('Pagado')}</div></div>`
     :`<div class="item"><button class="main lk" data-a="fijedit" data-id="${esc(x.f.id)}"><b>${esc(cap(x.f.c))} ${x.f.s==='NO'?whoChip(titular(x.f.cuenta)):''}</b><span class="sub">Día ${x.f.dia} · ${x.f.variable?'aprox. ':''}${money0(x.f.m)}</span></button><button class="mini" data-a="pague" data-id="${esc(x.f.id)}">Pagué</button></div>`).join('');
@@ -885,7 +888,7 @@ function vMes(){
     <div class="list">${ingRows.join('')||'<div class="empty">Sin ingresos en este periodo.</div>'}</div>
     <button class="btn ghost" data-a="ingnew">Agregar ingreso fijo</button></section>
   <section class="card"><div class="hd"><h2>Gastos fijos ${infoI('fijos')}</h2><b>${money0(P.tFij)}</b></div>
-    <div class="list">${fijRows||'<div class="empty">Sin gastos fijos.</div>'}</div>
+    <div class="list">${(fijRows+reemRows)||'<div class="empty">Sin gastos fijos.</div>'}</div>
     <button class="btn ghost" data-a="fijnew">Agregar gasto fijo</button></section>
   <section class="card"><div class="hd"><h2>Mensualidades MSI ${infoI('msi')}</h2><b>${money0(P.tMsi)}</b></div>
     <div class="list">${P.msi.map(x=>`<div class="item"><div class="main"><b>${esc(cap(x.x.c))}</b><span class="sub">Pago ${x.n} de ${x.x.meses} · ${esc(x.x.t)}</span></div><span class="amt">${money0(x.i.mens)}</span></div>`).join('')||'<div class="empty">Sin mensualidades en este periodo.</div>'}</div></section>
@@ -1083,7 +1086,7 @@ function claras(P){
     for(const r of x.paid){ usados.add(r); add(titular(r.a),r.f,x.f.c,r.m,x.f.s==='NO'?split(r.m,ft):[r.m*pr,r.m*(1-pr)],'fijo') } }
   for(const x of P.msi) add(titular(x.x.t),ymd(x.date),cap(x.x.c)+' '+x.n+'/'+x.x.meses,x.i.mens,[x.i.rafa,x.i.rebe],'msi');
   // ingresos de uno que le llegaron a la cuenta del otro (ej. lo de Bere)
-  for(const x of P.ing){ if(!esPersona(x.it.quien)) continue;
+  for(const x of [...P.ing,...P.reemFij]){ if(!esPersona(x.it.quien)) continue;
     for(const r of x.rec){ const h=titular(r.a); if(esPersona(h)&&h!==x.it.quien)
       (h==='RAFA'?R.debeRafa:R.debeRebe).push({f:r.f,c:cap(x.it.c)+' (le llegó a '+cap(h)+')',total:r.m,parte:r.m,tipo:'ingreso'}) } }
   // pagos entre ustedes
@@ -1133,7 +1136,7 @@ const INFO={
   'dia':['Día a día','Todo lo que no es gasto fijo, mensualidad MSI ni pago de tarjeta: súper, comida, transporte, salidas, salud… Cuenta por fecha de compra, aunque se pague con tarjeta después. Lo pagado con vales no entra aquí.'],
   'vales':['Vales','Bolsa aparte. Lo que les depositan no suma a Ingresos y lo que pagan con vales no se descuenta del día a día. Aquí ven el saldo, lo que llegó y lo que usaron en el periodo.'],
   'ingresos':['Ingresos','Nóminas y otros ingresos que esperan en el periodo. Cuando llegue uno, toquen “Recibí” para registrarlo. Mientras no llegue, cuenta como esperado.'],
-  'fijos':['Gastos fijos','Pagos que se repiten cada mes (renta, servicios, suscripciones). Toquen “Pagué” al pagarlo. Si el monto cambia, como la luz, se usa lo que registren. Tóquenlo para editar monto, día o reparto.'],
+  'fijos':['Gastos fijos','Pagos que se repiten cada mes (renta, servicios, suscripciones). Toquen “Pagué” al pagarlo. Si el monto cambia, como la luz, se usa lo que registren. Tóquenlo para editar monto, día o reparto. Lo que alguien les regresa de un gasto fijo (como Bere con Apple One) se resta aquí y no cuenta como ingreso.'],
   'msi':['Mensualidades MSI','Lo que las tarjetas les cargan en este periodo por compras a meses. Cuenta en el periodo del corte: BBVA el 12, Nu el 10, Plata el 14.'],
   'cada':['Cada quien','Entra: lo que le entra a cada uno en el periodo. Le toca: su parte de fijos, MSI y día a día según las reglas de reparto, sin importar quién pagó. El resultado es lo que le quedaría si cada quien pagara solo lo suyo. Quién le debe a quién está en Cuentas claras.'],
   'hist':['Periodo por periodo','Lo que sobró (verde) o faltó (rojo) en cada periodo ya cerrado, del 13 al 12.'],
