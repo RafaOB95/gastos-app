@@ -666,7 +666,21 @@ document.addEventListener('click',e=>{
   const i=b.parentNode.querySelector('input'); if(!i) return;
   i.value=''; i.focus(); i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new Event('change',{bubbles:true}));
 },true);
-new MutationObserver(()=>addClears()).observe(document.body,{childList:true,subtree:true});
+/* ---------- comas de miles mientras escriben montos ---------- */
+const MONEY_SEL='#m,#im,#gm,input.tope';
+function fmtTyped(v){
+  return v.replace(/,/g,'').replace(/\d+(\.\d*)?/g,t=>{const k=t.indexOf('.'), a=k<0?t:t.slice(0,k), b=k<0?'':t.slice(k);
+    return a.replace(/^0+(?=\d)/,'').replace(/\B(?=(\d{3})+(?!\d))/g,',')+b});
+}
+function fmtInput(i,keepCaret){
+  const v=i.value, f=fmtTyped(v); if(f===v) return;
+  let pos=v.length; try{ if(keepCaret&&i.selectionStart!=null) pos=i.selectionStart }catch(e){}
+  const n=v.slice(0,pos).replace(/,/g,'').length; i.value=f;
+  if(keepCaret){ let c=0,j=0; while(j<f.length&&c<n){ if(f[j]!==',') c++; j++ } try{i.setSelectionRange(j,j)}catch(e){} }
+}
+document.addEventListener('input',e=>{ const i=e.target; if(i.matches&&i.matches(MONEY_SEL)) fmtInput(i,true) },true);
+function fmtMoneyInputs(){ document.querySelectorAll(MONEY_SEL).forEach(i=>{ if(!i.dataset.fmt){ i.dataset.fmt='1'; fmtInput(i,false) } }) }
+new MutationObserver(()=>{addClears();fmtMoneyInputs()}).observe(document.body,{childList:true,subtree:true});
 addClears();
 /* ---------- plan del mes: ingresos fijos, gastos fijos, MSI y día a día ---------- */
 const DEF_ING=[];
