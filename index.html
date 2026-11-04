@@ -96,7 +96,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .btns .btn{flex:1;min-width:140px}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
   padding:6px max(8px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(8px,env(safe-area-inset-left,0px));display:flex;justify-content:center}
-.tabs nav{display:grid;grid-template-columns:repeat(5,1fr);width:100%;max-width:560px}
+.tabs nav{display:grid;grid-template-columns:repeat(6,1fr);width:100%;max-width:560px}
 .tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;min-height:52px;font-size:11px;font-weight:600;color:var(--muted)}
 .tabs button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .tabs button[aria-current="page"]{color:var(--accent)}
@@ -141,6 +141,12 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance}
 .hist .sv{fill:var(--ink);font:600 11px var(--f-body)}
 .hist .sl{fill:var(--muted);font:500 11px var(--f-body)}
 .card.note{background:var(--accent-soft);color:var(--ink);font-size:14px;font-weight:600}
+.ib{position:relative;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--muted);color:var(--muted);font:700 12px/1 var(--f-body);font-style:italic;vertical-align:middle;margin-left:4px;padding:0;flex:none}
+.ib::before{content:"";position:absolute;inset:-12px}
+#pop .popc{position:fixed;z-index:70;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 84px);max-width:540px;margin:0 auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 12px 40px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:8px}
+#pop .popc b{font-family:var(--f-display);font-size:17px}
+#pop .popc p{margin:0;color:var(--muted);font-size:15px;line-height:1.45}
+.hd h2{display:flex;align-items:center;gap:2px}
 
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
 .chips:empty{display:none}
@@ -164,6 +170,7 @@ textarea{min-height:110px;resize:vertical;font-family:ui-monospace,Menlo,monospa
 <div class="tabs"><nav id="tabs"></nav></div>
 <div id="sheet"></div>
 <div id="toastbox"></div>
+<div id="pop"></div>
 
 <script src="vendor/supabase.js"></script>
 <script src="config.js"></script>
@@ -269,9 +276,10 @@ const ICON={
   movs:'<path d="M5 7h14M5 12h14M5 17h9"/>',
   cuentas:'<rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h3"/>',
   msi:'<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
+  claras:'<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
   ajustes:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'
 };
-const TABS=[['resumen','Mes'],['movs','Movimientos'],['cuentas','Cuentas'],['msi','MSI'],['ajustes','Ajustes']];
+const TABS=[['resumen','Mes'],['movs','Registro'],['claras','A mano'],['cuentas','Cuentas'],['msi','MSI'],['ajustes','Ajustes']];
 
 /* ---------- vistas ---------- */
 function monthNav(title){
@@ -305,11 +313,11 @@ function vCuentas(){
   const nextOf=n=>up.find(u=>u.kind==='card'&&u.title==='Pago '+n);
   const up30=upcoming(30).slice(0,8);
   return `<div class="wrap"><div class="top"><h1>Cuentas</h1></div>
-  <section class="card"><h2>Próximos pagos</h2><span class="sub" style="margin-top:-8px">Siguientes 30 días: tarjetas (con MSI) y gastos fijos</span>
+  <section class="card"><h2>Próximos pagos ${infoI('proximos')}</h2><span class="sub" style="margin-top:-8px">Siguientes 30 días: tarjetas (con MSI) y gastos fijos</span>
   ${up30.length?`<div class="list">${up30.map(u=>`<div class="item"><div class="main"><b>${esc(u.title)}</b><span class="sub">${fmtDay(u.date)}${u.note?' · '+esc(u.note):''}</span></div><span class="amt">${money0(u.total)}</span></div>`).join('')}</div>`:`<div class="empty">No hay pagos próximos.</div>`}</section>
   <section class="card hero"><span class="sub">Dinero disponible en débito</span><div class="big">${money0(total)}</div><span class="sub">Calculado con el saldo inicial y tus movimientos</span></section>
-  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b></div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
-  <section class="card"><h2>Tarjetas de crédito</h2><div class="list">${S.cre.map(c=>{const n=nextOf(c.n);return `<div class="item"><div class="main"><b>${esc(c.n)}</b><span class="sub">${c.corte?'Corte día '+c.corte+' · pago día '+c.pago:'Sin fechas de corte'}</span></div><div style="text-align:right"><span class="amt">${n?money0(n.total):'—'}</span><div class="sub">${n?'el '+fmtDay(n.date):'sin pago próximo'}</div></div></div>`}).join('')}</div></section></div>`;
+  ${groups.map(g=>{const l=deb.filter(x=>x.a.tit===g);if(!l.length)return'';return `<section class="card"><h2>${g==='AMBOS'?'De los dos':cap(g)} ${infoI('debito')}</h2><div class="list">${l.map(x=>`<div class="item"><span class="dot" style="background:${g==='RAFA'?'var(--rafa)':g==='REBE'?'var(--rebe)':'var(--accent)'}"></span><div class="main"><b>${esc(x.a.n)}</b></div><span class="amt ${x.s<0?'neg':''}">${money(x.s)}</span></div>`).join('')}</div></section>`}).join('')}
+  <section class="card"><h2>Tarjetas de crédito ${infoI('tarjetas')}</h2><div class="list">${S.cre.map(c=>{const n=nextOf(c.n);return `<div class="item"><div class="main"><b>${esc(c.n)}</b><span class="sub">${c.corte?'Corte día '+c.corte+' · pago día '+c.pago:'Sin fechas de corte'}</span></div><div style="text-align:right"><span class="amt">${n?money0(n.total):'—'}</span><div class="sub">${n?'el '+fmtDay(n.date):'sin pago próximo'}</div></div></div>`}).join('')}</div></section></div>`;
 }
 function vMsi(){
   const t=today(), info=S.msi.map(m=>({m,i:msiInfo(m)}));
@@ -322,7 +330,7 @@ function vMsi(){
   const ROW=({m,i})=>`<button class="item" style="flex-direction:column;align-items:stretch;gap:8px" data-a="msiedit" data-i="${S.msi.indexOf(m)}"><div style="display:flex;justify-content:space-between;gap:12px"><div class="main"><b>${esc(cap(m.c))}</b><span class="sub">${esc(m.t)} · ${m.s==='NO'?'solo '+cap(titular(m.t)):'compartido'}</span></div><div style="text-align:right"><span class="amt">${money0(i.mens)}</span><div class="sub">por mes</div></div></div><div class="prog"><i style="width:${i.hechos/m.meses*100}%"></i></div><div style="display:flex;justify-content:space-between" class="sub"><span>${i.hechos?i.hechos+' de '+m.meses+' pagos':'Empieza a pagarse '+fmtDay(i.first)+' '+i.first.getFullYear()}</span><span>${i.faltan>0?'Termina '+i.last.toLocaleDateString('es-MX',{month:'short',year:'numeric'}).replace('.',''):'Liquidado'}</span></div></button>`;
   const sec=(titulo,sub,l)=>l.length?`<section class="card"><h2>${titulo}</h2>${sub?`<span class="sub" style="margin-top:-8px">${sub}</span>`:''}<div class="list">${l.map(ROW).join('')}</div></section>`:'';
   return `<div class="wrap"><div class="top"><h1>Meses sin intereses</h1></div>
-  <section class="card hero"><span class="sub">Mensualidades de este periodo (${esc(periodoRango(py,pm))})</span><div class="big">${money0(P.tMsi)}</div>
+  <section class="card hero"><span class="sub">Mensualidades de este periodo (${esc(periodoRango(py,pm))}) ${infoI('msi-tab')}</span><div class="big">${money0(P.tMsi)}</div>
     <span class="sub">Siguiente periodo (${esc(periodoRango(ny,nm))}): ${money0(N.tMsi)} · Quedan por pagar ${money0(rest)} en ${act.length+fut.length} compra${act.length+fut.length===1?'':'s'}</span></section>
   ${sec('Activas','Ya se están cobrando',act)}
   ${sec('Por empezar','Compradas, pero el primer pago todavía no llega',fut)}
@@ -531,11 +539,11 @@ function saveMsi(){
 /* ---------- render ---------- */
 function render(){
   if(!dataReady()){ $('#app').innerHTML=vLoading(); $('#tabs').innerHTML=''; $('#fab').hidden=true; return }
-  const v={resumen:vMes,movs:vMovs,cuentas:vCuentas,msi:vMsi,ajustes:vAjustes}[ui.tab]();
+  const v={resumen:vMes,movs:vMovs,claras:vClaras,cuentas:vCuentas,msi:vMsi,ajustes:vAjustes}[ui.tab]();
   const y=window.scrollY, qFocus=document.activeElement&&document.activeElement.id==='q'; const qs=qFocus?document.activeElement.selectionStart:0;
   $('#app').innerHTML=v;
   $('#tabs').innerHTML=TABS.map(([k,l])=>`<button data-a="tab" data-v="${k}" ${ui.tab===k?'aria-current="page"':''}><svg viewBox="0 0 24 24">${ICON[k]}</svg>${l}</button>`).join('');
-  $('#fab').hidden=!(ui.tab==='resumen'||ui.tab==='movs'||ui.tab==='cuentas');
+  $('#fab').hidden=!(ui.tab==='resumen'||ui.tab==='movs'||ui.tab==='cuentas'||ui.tab==='claras');
   if(qFocus){const q=$('#q');if(q){q.focus();q.setSelectionRange(qs,qs)}}
   window.scrollTo(0,y);
 }
@@ -719,7 +727,7 @@ function vValesCard(P){
     const uso=P.valG.filter(r=>r.a===acc.n).reduce((t,r)=>t+r.m,0);
     const sal=saldo(acc);
     return `<div class="item"><div class="main"><b>${esc(valesLabel(acc.n))} · saldo ${money0(sal)}</b><span class="sub">Este periodo: llegó ${money0(llego)}, usaron ${money0(uso)}${pend.length?' · próximo depósito '+(pend[0].d?fmtDay(pend[0].d):'')+' de '+money0(pend[0].it.m):''}</span></div>${pend.length?`<button class="mini" data-a="recibi" data-id="${esc(pend[0].it.id)}" data-d="${pend[0].d?ymd(pend[0].d):''}">Llegó</button>`:''}</div>`}).join('');
-  return `<section class="card"><h2>Vales</h2><span class="sub" style="margin-top:-8px">Bolsa aparte: no cuentan como ingreso y lo que pagan con ellos no se descuenta del día a día.</span><div class="list">${rows}</div></section>`;
+  return `<section class="card"><h2>Vales ${infoI('vales')}</h2><span class="sub" style="margin-top:-8px">Bolsa aparte: no cuentan como ingreso y lo que pagan con ellos no se descuenta del día a día.</span><div class="list">${rows}</div></section>`;
 }
 const whoChip=w=>w==='RAFA'?'<span class="chip r">Rafa</span>':w==='REBE'?'<span class="chip b">Rebe</span>':'<span class="chip a">Los dos</span>';
 const okChip=t=>`<span class="chip ok">✓ ${t}</span>`;
@@ -759,7 +767,7 @@ function vMes(){
   const meta=Math.round(S.metaPct*100);
   return `<div class="wrap">${monthNav('Mes')}${vBanners()}
   ${P.past?`<section class="card hero">
-    <span class="sub">Así cerró el periodo ${esc(monthLabel().toLowerCase().replace(/ de \d{4}$/,''))} (${esc(periodoRango(ui.y,ui.m))})</span>
+    <span class="sub">${infoI('mes-cierre')} Así cerró el periodo ${esc(monthLabel().toLowerCase().replace(/ de \d{4}$/,''))} (${esc(periodoRango(ui.y,ui.m))})</span>
     <div class="big ${sobra?'pos':'neg'}">${sobra?'Sobraron ':'Faltaron '}${money0(Math.abs(P.res))}</div>
     <div class="flow">
       ${flowRow('Ingresos',P.tIng,'',' ')}
@@ -770,7 +778,7 @@ function vMes(){
     </div>
     <div class="goal ${P.res>=P.meta?'met':''}">${P.res>=P.meta?`Cumplieron la meta de ahorrar ${meta}% (${money0(P.meta)})`:`Meta: ahorrar ${meta}% = ${money0(P.meta)}. ${P.res>0?'Quedaron '+money0(P.meta-P.res)+' abajo.':'No alcanzó para ahorrar.'}`}</div>
   </section>`:`<section class="card hero">
-    <span class="sub">Para ahorrar ${meta}%, en el día a día ${P.cur?'les quedan':'pueden gastar'}</span>
+    <span class="sub">Para ahorrar ${meta}%, en el día a día ${P.cur?'les quedan':'pueden gastar'} ${infoI('mes-plan')}</span>
     <div class="big ${left<0?'neg':''}">${left<0?'Se pasaron '+money0(-left):money0(left)}</div>
     ${P.cur&&left>0?`<span class="sub">Unos ${money0(left/P.daysLeft)} por día los ${P.daysLeft} días que faltan</span>`:''}
     <div class="flow">
@@ -783,7 +791,7 @@ function vMes(){
     </div>
   </section>`}
   <section class="card">
-    <h2>Día a día</h2>
+    <h2>Día a día ${infoI('dia')}</h2>
     ${P.disp>0?`<span class="sub" style="margin-top:-8px">Para ahorrar ${meta}%, pueden gastar hasta ${money0(P.disp)} en súper, comida, transporte y demás.</span>
     <div class="prog big2 ${left<0?'over':''}"><i style="width:${pctUsed}%"></i></div>
     <div class="fl"><span>Llevan ${money0(P.tVar)}</span><b class="${left<0?'neg':''}">${left>=0?'Quedan '+money0(left):'Se pasaron '+money0(-left)}</b></div>
@@ -794,19 +802,20 @@ function vMes(){
     ${P.tValG?`<span class="sub">Lo que pagaron con vales (${money0(P.tValG)}) no cuenta aquí: sale de la bolsa de vales.</span>`:''}
   </section>
   ${vValesCard(P)}
-  <section class="card"><div class="hd"><h2>Ingresos</h2><b>${money0(P.tIng)}</b></div>
+  <section class="card"><div class="hd"><h2>Ingresos ${infoI('ingresos')}</h2><b>${money0(P.tIng)}</b></div>
     <span class="sub" style="margin-top:-8px">Recibido ${money0(P.tIngRec)} de ${money0(P.tIng)}</span>
     <div class="list">${ingRows.join('')||'<div class="empty">Sin ingresos en este periodo.</div>'}</div>
     <button class="btn ghost" data-a="ingnew">Agregar ingreso fijo</button></section>
-  <section class="card"><div class="hd"><h2>Gastos fijos</h2><b>${money0(P.tFij)}</b></div>
+  <section class="card"><div class="hd"><h2>Gastos fijos ${infoI('fijos')}</h2><b>${money0(P.tFij)}</b></div>
     <div class="list">${fijRows||'<div class="empty">Sin gastos fijos.</div>'}</div>
     <button class="btn ghost" data-a="fijnew">Agregar gasto fijo</button></section>
-  <section class="card"><div class="hd"><h2>Mensualidades MSI</h2><b>${money0(P.tMsi)}</b></div>
+  <section class="card"><div class="hd"><h2>Mensualidades MSI ${infoI('msi')}</h2><b>${money0(P.tMsi)}</b></div>
     <div class="list">${P.msi.map(x=>`<div class="item"><div class="main"><b>${esc(cap(x.x.c))}</b><span class="sub">Pago ${x.n} de ${x.x.meses} · ${esc(x.x.t)}</span></div><span class="amt">${money0(x.i.mens)}</span></div>`).join('')||'<div class="empty">Sin mensualidades en este periodo.</div>'}</div></section>
-  <section class="card"><h2>Cada quien</h2>
+  <section class="card"><h2>Cada quien ${infoI('cada')}</h2>
     ${[['RAFA','Rafa',P.rafa,'var(--rafa)'],['REBE','Rebe',P.rebe,'var(--rebe)']].map(([k,n,o,c])=>{const q=o.ing-o.gas;return `<div class="who2"><span class="dot" style="background:${c}"></span><div class="main"><b>${n}</b><span class="sub">Entra ${money0(o.ing)} · le toca ${money0(o.gas)}</span></div><b class="${q<0?'neg':'pos'}">${q<0?'−':'+'}${money0(Math.abs(q))}</b></div>`}).join('')}
-    <span class="sub">“Le toca” es su parte de fijos, MSI y día a día según las reglas de reparto, sin importar quién pagó.</span></section>
-  <section class="card"><h2>Periodo por periodo</h2><span class="sub" style="margin-top:-8px">Periodos ya cerrados (del 13 al 12) desde que viven juntos</span>${histSvg()}</section>
+    <span class="sub">“Le toca” es su parte de fijos, MSI y día a día según las reglas de reparto, sin importar quién pagó.</span>
+    <button class="btn ghost" data-a="tab" data-v="claras">Ver quién le paga a quién</button></section>
+  <section class="card"><h2>Periodo por periodo ${infoI('hist')}</h2><span class="sub" style="margin-top:-8px">Periodos ya cerrados (del 13 al 12) desde que viven juntos</span>${histSvg()}</section>
   </div>`;
 }
 
@@ -896,6 +905,100 @@ document.addEventListener('click',e=>{
   if(a==='fijedit'){const f=S.fijos.find(x=>x.id===el.dataset.id); ui.sheet={kind:'fijo',edit:true,confirm:false,data:Object.assign(clone(f),{m:String(f.m)})};renderSheet();return}
   if(a==='fijdel'){ if(!ui.sheet.confirm){const g=id=>document.getElementById(id).value;Object.assign(ui.sheet.data,{c:g('gc'),m:g('gm'),dia:g('gd'),k:g('gk'),cuenta:g('ga'),s:document.getElementById('gs').checked?'SÍ':'NO',variable:document.getElementById('gv').checked});ui.sheet.confirm=true;renderSheet();return} S.fijos=S.fijos.filter(x=>x.id!==ui.sheet.data.id);save();ui.sheet=null;renderSheet();render();toast('Gasto fijo eliminado');return}
   if(a==='savemeta'){const v=num($('#meta').value); if(!(v>=0&&v<=90)){toast('Usa un porcentaje entre 0 y 90');return} S.metaPct=v/100; save(); render(); toast('Meta guardada'); return}
+});
+
+/* ---------- cuentas claras: quién le paga a quién en el periodo ---------- */
+const otro=w=>w==='RAFA'?'REBE':'RAFA';
+const esPersona=w=>w==='RAFA'||w==='REBE';
+function claras(P){
+  const per=P.per, a=ymd(per.start), b=ymd(per.end), rows=S.reg.filter(r=>r.f>=a&&r.f<=b);
+  const R={debeRafa:[],debeRebe:[],pagos:[]};
+  // payer pagó algo; al otro le toca su parte
+  const add=(payer,f,c,total,sh,tipo)=>{
+    if(!esPersona(payer)) return;
+    const parte=payer==='RAFA'?sh[1]:sh[0]; if(!(parte>0.005)) return;
+    (payer==='RAFA'?R.debeRebe:R.debeRafa).push({f,c,total,parte,tipo});
+  };
+  for(const r of P.vars) add(titular(r.a),r.f,r.c,r.m,parts(r),'gasto');
+  const usados=new Set();
+  for(const x of P.fij){ const ft=titular(x.f.cuenta), pr=typeof x.f.pr==='number'?x.f.pr:S.pctCasa;
+    for(const r of x.paid){ usados.add(r); add(titular(r.a),r.f,x.f.c,r.m,x.f.s==='NO'?split(r.m,ft):[r.m*pr,r.m*(1-pr)],'fijo') } }
+  for(const x of P.msi) add(titular(x.x.t),ymd(x.date),cap(x.x.c)+' '+x.n+'/'+x.x.meses,x.i.mens,[x.i.rafa,x.i.rebe],'msi');
+  // ingresos de uno que le llegaron a la cuenta del otro (ej. lo de Bere)
+  for(const x of P.ing){ if(!esPersona(x.it.quien)) continue;
+    for(const r of x.rec){ const h=titular(r.a); if(esPersona(h)&&h!==x.it.quien)
+      (h==='RAFA'?R.debeRafa:R.debeRebe).push({f:r.f,c:cap(x.it.c)+' (le llegó a '+cap(h)+')',total:r.m,parte:r.m,tipo:'ingreso'}) } }
+  // pagos entre ustedes
+  const fset=new Set(S.fijos.map(f=>f.c));
+  const reemC=new Set(rows.filter(r=>r.t==='REEMBOLSO'&&fset.has(r.c)).map(r=>r.c));
+  for(const r of rows){
+    if(r.t==='REEMBOLSO'&&fset.has(r.c)){ const to=titular(r.a); if(esPersona(to)) R.pagos.push({f:r.f,de:otro(to),a:to,m:r.m,c:cap(r.c)}) }
+    if(r.t==='GASTO'&&fset.has(r.c)&&!usados.has(r)&&!reemC.has(r.c)){ const from=titular(r.a); const f=S.fijos.find(x=>x.c===r.c); const to=f?titular(f.cuenta):otro(from);
+      if(esPersona(from)&&esPersona(to)&&from!==to) R.pagos.push({f:r.f,de:from,a:to,m:r.m,c:cap(r.c)}) }
+    if(r.t==='TRANSFERENCIA'&&r.m>0){ const to=titular(r.a); if(!esPersona(to)) continue;
+      const par=rows.find(q=>q.t==='TRANSFERENCIA'&&q.m<0&&q.f===r.f&&Math.abs(q.m+r.m)<0.01&&esPersona(titular(q.a))&&titular(q.a)!==to);
+      if(par) R.pagos.push({f:r.f,de:titular(par.a),a:to,m:r.m,c:'Transferencia'}) }
+  }
+  const sum=l=>l.reduce((t,x)=>t+(x.parte!=null?x.parte:x.m),0);
+  R.tRafa=sum(R.debeRafa); R.tRebe=sum(R.debeRebe);
+  R.pRafa=sum(R.pagos.filter(p=>p.de==='RAFA')); R.pRebe=sum(R.pagos.filter(p=>p.de==='REBE'));
+  R.neto=(R.tRafa-R.pRafa)-(R.tRebe-R.pRebe); // >0: Rafa le pasa a Rebe
+  return R;
+}
+function vClaras(){
+  const P=monthPlan(ui.y,ui.m), R=claras(P), n=Math.round(R.neto*100)/100;
+  const quien=n>0?'RAFA':'REBE', abs=Math.abs(n);
+  const lista=(l,vacio)=>l.length?`<div class="list">${[...l].sort((x,y)=>x.f.localeCompare(y.f)).map(x=>`<div class="item"><div class="main"><b>${esc(x.tipo==='gasto'||x.tipo==='fijo'?cap(x.c):x.c)}</b><span class="sub">${fmtDay(parse(x.f))}${x.tipo==='ingreso'?'':' · total '+money0(x.total)}${x.tipo==='msi'?' · MSI':x.tipo==='fijo'?' · fijo':''}</span></div><span class="amt">${money(x.parte)}</span></div>`).join('')}</div>`:`<div class="empty">${vacio}</div>`;
+  const pagos=R.pagos.length?`<div class="list">${R.pagos.map(p=>`<div class="item"><div class="main"><b>${cap(p.de)} → ${cap(p.a)}</b><span class="sub">${fmtDay(parse(p.f))} · ${esc(p.c)}</span></div><span class="amt">${money(p.m)}</span></div>`).join('')}</div>`:'<div class="empty">Aún no se han pasado dinero en este periodo.</div>';
+  return `<div class="wrap">${monthNav('Cuentas claras')}
+  <section class="card hero"><span class="sub">${P.past?'Al cerrar el periodo':'Hasta hoy, en este periodo'} ${infoI('claras')}</span>
+    <div class="big">${abs<1?'Están a mano':money0(abs)}</div>
+    ${abs<1?'':`<span class="sub" style="font-size:16px;font-weight:600;color:var(--ink)">${cap(quien)} le pasa a ${cap(otro(quien))}</span>`}
+    <div class="flow">
+      ${flowRow('Rafa le debe a Rebe',R.tRafa,'','')}
+      ${R.pRafa?flowRow('Rafa ya le pasó',R.pRafa,'','−'):''}
+      ${flowRow('Rebe le debe a Rafa',R.tRebe,'','')}
+      ${R.pRebe?flowRow('Rebe ya le pasó',R.pRebe,'','−'):''}
+    </div>
+    ${abs>=1?`<button class="btn" data-a="saldar" data-de="${quien}" data-m="${abs.toFixed(2)}">Registrar que ${cap(quien)} pagó ${money0(abs)}</button>`:''}
+  </section>
+  <section class="card"><div class="hd"><h2>Pagó Rebe, le toca a Rafa ${infoI('claras-rebe')}</h2><b>${money0(R.tRafa)}</b></div>${lista(R.debeRafa,'Nada en este periodo.')}</section>
+  <section class="card"><div class="hd"><h2>Pagó Rafa, le toca a Rebe ${infoI('claras-rafa')}</h2><b>${money0(R.tRebe)}</b></div>${lista(R.debeRebe,'Nada en este periodo.')}</section>
+  <section class="card"><div class="hd"><h2>Pagos entre ustedes ${infoI('claras-pagos')}</h2><b>${money0(R.pRafa+R.pRebe)}</b></div>${pagos}</section>
+  </div>`;
+}
+
+/* ---------- íconos (i) con explicación ---------- */
+const INFO={
+  'mes-plan':['Para el día a día','Lo que entra en el periodo, menos gastos fijos, menos mensualidades MSI, menos el ahorro que quieren apartar. Lo que queda es lo que pueden gastar en el día a día sin dejar de ahorrar.'],
+  'mes-cierre':['Así cerró','Lo que entró en el periodo menos fijos, MSI y día a día. Si es positivo, eso es lo que pudieron ahorrar; si es negativo, lo tomaron de sus ahorros.'],
+  'dia':['Día a día','Todo lo que no es gasto fijo, mensualidad MSI ni pago de tarjeta: súper, comida, transporte, salidas, salud… Cuenta por fecha de compra, aunque se pague con tarjeta después. Lo pagado con vales no entra aquí.'],
+  'vales':['Vales','Bolsa aparte. Lo que les depositan no suma a Ingresos y lo que pagan con vales no se descuenta del día a día. Aquí ven el saldo, lo que llegó y lo que usaron en el periodo.'],
+  'ingresos':['Ingresos','Nóminas y otros ingresos que esperan en el periodo. Cuando llegue uno, toquen “Recibí” para registrarlo. Mientras no llegue, cuenta como esperado.'],
+  'fijos':['Gastos fijos','Pagos que se repiten cada mes (renta, servicios, suscripciones). Toquen “Pagué” al pagarlo. Si el monto cambia, como la luz, se usa lo que registren. Tóquenlo para editar monto, día o reparto.'],
+  'msi':['Mensualidades MSI','Lo que las tarjetas les cargan en este periodo por compras a meses. Cuenta en el periodo del corte: BBVA el 12, Nu el 10, Plata el 14.'],
+  'cada':['Cada quien','Entra: lo que le entra a cada uno en el periodo. Le toca: su parte de fijos, MSI y día a día según las reglas de reparto, sin importar quién pagó. El resultado es lo que le quedaría si cada quien pagara solo lo suyo. Quién le debe a quién está en Cuentas claras.'],
+  'hist':['Periodo por periodo','Lo que sobró (verde) o faltó (rojo) en cada periodo ya cerrado, del 13 al 12.'],
+  'claras':['Cuentas claras','Compara lo que pagó cada quien con lo que le tocaba. Si Rebe pagó algo compartido, a Rafa le toca su parte, y al revés. Se restan los pagos que ya se hicieron entre ustedes y queda quién le pasa cuánto a quién para quedar a mano.'],
+  'claras-rebe':['Pagó Rebe, le toca a Rafa','Gastos que salieron de cuentas o tarjetas de Rebe y en los que Rafa tiene una parte. Se muestra solo la parte de Rafa.'],
+  'claras-rafa':['Pagó Rafa, le toca a Rebe','Gastos que salieron de cuentas o tarjetas de Rafa y en los que Rebe tiene una parte, más ingresos de Rafa que le llegaron a Rebe (como lo de Bere).'],
+  'claras-pagos':['Pagos entre ustedes','Dinero que ya se pasaron: transferencias de una cuenta de Rafa a una de Rebe (o al revés) y reembolsos de gastos fijos como la renta. Para registrar uno, usen “Transferencia” en el botón +.'],
+  'proximos':['Próximos pagos','Lo que tienen que pagar en los siguientes 30 días: tarjetas (con sus MSI) y gastos fijos.'],
+  'debito':['Saldos','Calculado por la app: saldo inicial más lo que entra menos lo que sale de cada cuenta. Si no coincide con el banco, falta registrar algún movimiento.'],
+  'tarjetas':['Tarjetas de crédito','Día de corte, día de pago y el próximo pago estimado de cada tarjeta.'],
+  'msi-tab':['Meses sin intereses','Arriba, lo que se cobra en este periodo y en el siguiente. Activas: ya se están cobrando. Por empezar: compradas, pero el primer pago aún no llega. Tóquenlas para editar.']
+};
+const infoI=k=>`<button type="button" class="ib" data-a="info" data-k="${k}" aria-label="Qué significa">i</button>`;
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-a]');
+  const pop=document.getElementById('pop');
+  if(!el){ if(pop&&!e.target.closest('#pop')) pop.innerHTML=''; return }
+  const a=el.dataset.a;
+  if(a==='info'){ const [t,txt]=INFO[el.dataset.k]||['','']; pop.innerHTML=`<div class="popc" role="dialog" aria-label="${esc(t)}"><b>${esc(t)}</b><p>${esc(txt)}</p><button type="button" class="btn ghost" data-a="popx">Entendido</button></div>`; return }
+  if(a==='popx'){ pop.innerHTML=''; return }
+  if(a==='saldar'){ const de=el.dataset.de, para=otro(de), m=el.dataset.m;
+    const cta=w=>{const d=S.deb.find(x=>x.tit===w&&/NU/.test(x.n))||S.deb.find(x=>x.tit===w); return d?d.n:''};
+    openSheet(null,{t:'TRANSFERENCIA',d:{m,a:cta(de),a2:cta(para),f:ymd(today()),n:'Cuentas claras'}}); return }
 });
 
 /* ---------- datos compartidos entre los dos teléfonos ---------- */
