@@ -656,7 +656,7 @@ function monthPlan(y,m){
     const paid=rows.filter(r=>r.t==='GASTO'&&r.c===f.c&&(isAmb(ft)||titular(r.a)===ft||r.a===f.cuenta));
     const amt=paid.length?paid.reduce((t,r)=>t+r.m,0):f.m;
     P.fij.push({f,paid,amt,date:new Date(y,m,Math.min(f.dia||1,dim(y,m)))});
-    addP(f.s==='NO'?split(amt,ft):[amt*S.pctCasa,amt*(1-S.pctCasa)],'gas');
+    {const pr=typeof f.pr==='number'?f.pr:S.pctCasa; addP(f.s==='NO'?split(amt,ft):[amt*pr,amt*(1-pr)],'gas');}
   }
   // MSI con mensualidad en este mes
   for(const x of S.msi){ const i=msiInfo(x);
@@ -835,7 +835,8 @@ function sheetFij(){
   <div class="field"><label for="gd">Día de pago</label><input id="gd" inputmode="numeric" value="${esc(d.dia)}"></div></div>
   <div class="field"><label for="gk">Categoría</label><input id="gk" value="${esc(d.k)}" placeholder="Ej. servicios" autocomplete="off" autocapitalize="characters"></div>
   <div class="field"><label for="ga">Se paga con</label>${selHtml('ga',dg,d.cuenta)}</div>
-  <label class="sw" for="gs"><span>Compartido<small class="sub" style="display:block">Se reparte con el porcentaje de casa</small></span><input id="gs" type="checkbox" ${d.s!=='NO'?'checked':''}></label>
+  <label class="sw" for="gs"><span>Compartido<small class="sub" style="display:block">Si lo apagas, es todo de quien paga</small></span><input id="gs" type="checkbox" ${d.s!=='NO'?'checked':''}></label>
+  <div class="field"><label for="gpr">Parte de Rafa si es compartido (%)</label><input id="gpr" inputmode="decimal" value="${typeof d.pr==='number'?Math.round(d.pr*1000)/10:''}" placeholder="${Math.round(S.pctCasa*1000)/10} (porcentaje de casa)"><span class="sub">Déjalo vacío para usar el porcentaje de casa. Ej.: Apple One, Rafa paga 350 de 529 = 66.2%.</span></div>
   <label class="sw" for="gv"><span>El monto cambia cada mes<small class="sub" style="display:block">Ej. luz o gas. Se usa lo que registres.</small></span><input id="gv" type="checkbox" ${d.variable?'checked':''}></label>
   <div class="btns"><button type="submit" class="btn">Guardar</button>${sh.edit?`<button type="button" class="btn ${sh.confirm?'danger':'ghost'}" data-a="fijdel">${sh.confirm?'Confirmar eliminar':'Eliminar'}</button>`:''}</div>
   </form></div>`;
@@ -844,6 +845,7 @@ function saveFij(){
   const g=id=>document.getElementById(id); const c=g('gc').value.trim().toUpperCase(), m=evalAmount(g('gm').value), dia=parseInt(g('gd').value,10);
   if(!c){toast('Ponle nombre al gasto');return} if(!(m>0)){toast('Escribe el monto');return} if(!(dia>=1&&dia<=31)){toast('Escribe un día entre 1 y 31');return}
   const o={id:ui.sheet.data.id||('f'+Date.now()),c,k:g('gk').value.trim().toUpperCase()||'SERVICIOS',m,dia,cuenta:g('ga').value,s:g('gs').checked?'SÍ':'NO',variable:g('gv').checked};
+  {const v=g('gpr').value.trim(); if(v){const n=num(v); if(!(n>=0&&n<=100)){toast('La parte de Rafa va de 0 a 100');return} o.pr=Math.round(n*10)/1000}}
   if(ui.sheet.data.desde) o.desde=ui.sheet.data.desde; else if(!ui.sheet.edit) o.desde=ymd(new Date(ui.y,ui.m,1));
   const i=S.fijos.findIndex(x=>x.id===o.id); if(i>=0) S.fijos[i]=o; else S.fijos.push(o);
   save(); ui.sheet=null; renderSheet(); render(); toast('Gasto fijo guardado');
