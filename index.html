@@ -312,12 +312,22 @@ function vCuentas(){
   <section class="card"><h2>Tarjetas de crédito</h2><div class="list">${S.cre.map(c=>{const n=nextOf(c.n);return `<div class="item"><div class="main"><b>${esc(c.n)}</b><span class="sub">${c.corte?'Corte día '+c.corte+' · pago día '+c.pago:'Sin fechas de corte'}</span></div><div style="text-align:right"><span class="amt">${n?money0(n.total):'—'}</span><div class="sub">${n?'el '+fmtDay(n.date):'sin pago próximo'}</div></div></div>`}).join('')}</div></section></div>`;
 }
 function vMsi(){
-  const info=S.msi.map(m=>({m,i:msiInfo(m)})).sort((a,b)=>b.i.faltan-a.i.faltan);
-  const act=info.filter(x=>x.i.faltan>0);
-  const mensual=act.reduce((t,x)=>t+x.i.mens,0), rest=act.reduce((t,x)=>t+x.i.rest,0);
+  const t=today(), info=S.msi.map(m=>({m,i:msiInfo(m)}));
+  const [py,pm]=periodoDe(ymd(t)), P=monthPlan(py,pm);
+  const [ny,nm]=(()=>{const d=new Date(py,pm+1,1);return [d.getFullYear(),d.getMonth()]})(), N=monthPlan(ny,nm);
+  const act=info.filter(x=>x.i.faltan>0&&x.i.first<=t).sort((a,b)=>a.i.last-b.i.last);
+  const fut=info.filter(x=>x.i.faltan>0&&x.i.first>t).sort((a,b)=>a.i.first-b.i.first);
+  const fin=info.filter(x=>x.i.faltan<=0);
+  const rest=[...act,...fut].reduce((s,x)=>s+x.i.rest,0);
+  const ROW=({m,i})=>`<button class="item" style="flex-direction:column;align-items:stretch;gap:8px" data-a="msiedit" data-i="${S.msi.indexOf(m)}"><div style="display:flex;justify-content:space-between;gap:12px"><div class="main"><b>${esc(cap(m.c))}</b><span class="sub">${esc(m.t)} · ${m.s==='NO'?'solo '+cap(titular(m.t)):'compartido'}</span></div><div style="text-align:right"><span class="amt">${money0(i.mens)}</span><div class="sub">por mes</div></div></div><div class="prog"><i style="width:${i.hechos/m.meses*100}%"></i></div><div style="display:flex;justify-content:space-between" class="sub"><span>${i.hechos?i.hechos+' de '+m.meses+' pagos':'Empieza a pagarse '+fmtDay(i.first)+' '+i.first.getFullYear()}</span><span>${i.faltan>0?'Termina '+i.last.toLocaleDateString('es-MX',{month:'short',year:'numeric'}).replace('.',''):'Liquidado'}</span></div></button>`;
+  const sec=(titulo,sub,l)=>l.length?`<section class="card"><h2>${titulo}</h2>${sub?`<span class="sub" style="margin-top:-8px">${sub}</span>`:''}<div class="list">${l.map(ROW).join('')}</div></section>`:'';
   return `<div class="wrap"><div class="top"><h1>Meses sin intereses</h1></div>
-  <section class="card hero"><span class="sub">Mensualidades activas</span><div class="big">${money0(mensual)}<span class="sub" style="font-size:16px;font-weight:600"> al mes</span></div><span class="sub">Quedan por pagar ${money0(rest)} en ${act.length} compra${act.length===1?'':'s'}</span></section>
-  ${info.length?`<section class="card"><div class="list">${info.map(({m,i})=>`<button class="item" style="flex-direction:column;align-items:stretch;gap:8px" data-a="msiedit" data-i="${S.msi.indexOf(m)}"><div style="display:flex;justify-content:space-between;gap:12px"><div class="main"><b>${esc(cap(m.c))}</b><span class="sub">${esc(m.t)} · ${m.s==='NO'?'solo '+cap(titular(m.t)):'compartido'}</span></div><div style="text-align:right"><span class="amt">${money0(i.mens)}</span><div class="sub">por mes</div></div></div><div class="prog"><i style="width:${i.hechos/m.meses*100}%"></i></div><div style="display:flex;justify-content:space-between" class="sub"><span>${i.hechos?i.hechos+' de '+m.meses+' pagos':'Empieza a pagarse '+fmtDay(i.first)+' '+i.first.getFullYear()}</span><span>${i.faltan>0?'Termina '+i.last.toLocaleDateString('es-MX',{month:'short',year:'numeric'}).replace('.',''):'Liquidado'}</span></div></button>`).join('')}</div></section>`:`<section class="card empty"><b>Sin compras a meses</b>Agrega una para ver cuánto queda por pagar.</section>`}
+  <section class="card hero"><span class="sub">Mensualidades de este periodo (${esc(periodoRango(py,pm))})</span><div class="big">${money0(P.tMsi)}</div>
+    <span class="sub">Siguiente periodo (${esc(periodoRango(ny,nm))}): ${money0(N.tMsi)} · Quedan por pagar ${money0(rest)} en ${act.length+fut.length} compra${act.length+fut.length===1?'':'s'}</span></section>
+  ${sec('Activas','Ya se están cobrando',act)}
+  ${sec('Por empezar','Compradas, pero el primer pago todavía no llega',fut)}
+  ${sec('Liquidadas','',fin)}
+  ${info.length?'':`<section class="card empty"><b>Sin compras a meses</b>Agrega una para ver cuánto queda por pagar.</section>`}
   <button class="btn" data-a="msinew">Agregar compra a MSI</button></div>`;
 }
 function vAjustes(){
