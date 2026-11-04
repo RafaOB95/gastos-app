@@ -1,0 +1,16 @@
+{
+  "name": "Gastos Pareja",
+  "short_name": "Gastos",
+  "description": "Control de gastos en pareja: ingresos, fijos, MSI y día a día.",
+  "lang": "es-MX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EEF2F0",
+  "theme_color": "#0E7A6B",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
