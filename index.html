@@ -973,7 +973,8 @@ function rendSerie(acc){
   if(!(acc.tasa>0)) return null;
   const movs=S.reg.filter(r=>r.a===acc.n).sort((a,b)=>a.f.localeCompare(b.f));
   const ints=movs.filter(esInteres), last=ints.length?ints[ints.length-1].f:null;
-  const d0=last?nextDay(parse(last)):(acc.tasaDesde?parse(acc.tasaDesde):null); if(!d0) return null;
+  let d0=last?nextDay(parse(last)):null; const td=acc.tasaDesde?parse(acc.tasaDesde):null;
+  if(td&&(!d0||td>d0)) d0=td; if(!d0) return null;
   const t=today(), end=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1), ds=ymd(d0), r1=acc.tasa/100/365, r2=(acc.tasa2||0)/100/365, tope=acc.tope>0?acc.tope:Infinity;
   const mv=r=>r.t==='GASTO'?-r.m:r.m;
   let bal=acc.ini||0, i=0, tot=0; const days=[];
