@@ -230,7 +230,7 @@ function cycle(dateStr,card){
 }
 function msiInfo(m){
   const card=S.cre.find(c=>c.n===m.t); const cy=cycle(m.f,card);
-  const first=cy?cy.pago:addM(parse(m.f),1); const mens=m.m/m.meses; const t=today();
+  const first=m.primer?parse(m.primer):(cy?cy.pago:addM(parse(m.f),1)); const mens=m.m/m.meses; const t=today();
   let hechos=0; for(let k=0;k<m.meses;k++){ if(addM(first,k)<=t) hechos++; }
   const last=addM(first,m.meses-1);
   const sharedNo=m.s==='NO'; const tit=titular(m.t);
@@ -313,7 +313,7 @@ function vMsi(){
   const mensual=act.reduce((t,x)=>t+x.i.mens,0), rest=act.reduce((t,x)=>t+x.i.rest,0);
   return `<div class="wrap"><div class="top"><h1>Meses sin intereses</h1></div>
   <section class="card hero"><span class="sub">Mensualidades activas</span><div class="big">${money0(mensual)}<span class="sub" style="font-size:16px;font-weight:600"> al mes</span></div><span class="sub">Quedan por pagar ${money0(rest)} en ${act.length} compra${act.length===1?'':'s'}</span></section>
-  ${info.length?`<section class="card"><div class="list">${info.map(({m,i})=>`<button class="item" style="flex-direction:column;align-items:stretch;gap:8px" data-a="msiedit" data-i="${S.msi.indexOf(m)}"><div style="display:flex;justify-content:space-between;gap:12px"><div class="main"><b>${esc(cap(m.c))}</b><span class="sub">${esc(m.t)} · ${m.s==='NO'?'solo '+cap(titular(m.t)):'compartido'}</span></div><div style="text-align:right"><span class="amt">${money0(i.mens)}</span><div class="sub">por mes</div></div></div><div class="prog"><i style="width:${i.hechos/m.meses*100}%"></i></div><div style="display:flex;justify-content:space-between" class="sub"><span>${i.hechos} de ${m.meses} pagos</span><span>${i.faltan>0?'Termina '+i.last.toLocaleDateString('es-MX',{month:'short',year:'numeric'}).replace('.',''):'Liquidado'}</span></div></button>`).join('')}</div></section>`:`<section class="card empty"><b>Sin compras a meses</b>Agrega una para ver cuánto queda por pagar.</section>`}
+  ${info.length?`<section class="card"><div class="list">${info.map(({m,i})=>`<button class="item" style="flex-direction:column;align-items:stretch;gap:8px" data-a="msiedit" data-i="${S.msi.indexOf(m)}"><div style="display:flex;justify-content:space-between;gap:12px"><div class="main"><b>${esc(cap(m.c))}</b><span class="sub">${esc(m.t)} · ${m.s==='NO'?'solo '+cap(titular(m.t)):'compartido'}</span></div><div style="text-align:right"><span class="amt">${money0(i.mens)}</span><div class="sub">por mes</div></div></div><div class="prog"><i style="width:${i.hechos/m.meses*100}%"></i></div><div style="display:flex;justify-content:space-between" class="sub"><span>${i.hechos?i.hechos+' de '+m.meses+' pagos':'Empieza a pagarse '+fmtDay(i.first)+' '+i.first.getFullYear()}</span><span>${i.faltan>0?'Termina '+i.last.toLocaleDateString('es-MX',{month:'short',year:'numeric'}).replace('.',''):'Liquidado'}</span></div></button>`).join('')}</div></section>`:`<section class="card empty"><b>Sin compras a meses</b>Agrega una para ver cuánto queda por pagar.</section>`}
   <button class="btn" data-a="msinew">Agregar compra a MSI</button></div>`;
 }
 function vAjustes(){
@@ -501,6 +501,7 @@ function sheetMsi(){
   <div class="field"><label for="ms">Meses</label><input id="ms" inputmode="numeric" value="${esc(d.meses)}"></div></div>
   <div class="two"><div class="field"><label for="t">Tarjeta</label><select id="t">${cards.map(a=>`<option ${a===d.t?'selected':''}>${esc(a)}</option>`).join('')}</select></div>
   <div class="field"><label for="f_">Fecha de compra</label><input id="f_" type="date" value="${esc(d.f)}"></div></div>
+  <div class="field"><label for="pp">Primer pago (opcional)</label><input id="pp" type="date" value="${esc(d.primer||'')}"><span class="sub">Úsalo si la promoción empieza a cobrarse después, por ejemplo "compra hoy y paga desde enero". Si lo dejas vacío, se calcula con el corte de la tarjeta.</span></div>
   <label class="sw" for="s"><span>Compartido</span><input id="s" type="checkbox" ${d.s!=='NO'?'checked':''}></label>
   <div class="btns"><button type="submit" class="btn">Guardar</button>${sh.edit?`<button type="button" class="btn ${sh.confirm?'danger':'ghost'}" data-a="msidel">${sh.confirm?'Confirmar eliminar':'Eliminar'}</button>`:''}</div>
   </form></div>`;
@@ -509,7 +510,7 @@ function saveMsi(){
   const g=id=>$('#'+id).value; const m=evalAmount(g('m')),ms=parseInt(g('ms'),10),c=g('c').trim().toUpperCase();
   if(!c){toast('Falta el nombre de la compra');return} if(!(m>0)){toast('Escribe el monto total');return} if(!(ms>0)){toast('Escribe los meses');return} if(!g('f_')){toast('Elige la fecha');return}
   const ed=ui.sheet.edit;
-  const o={id:ed?(S.msi[ui.sheet.idx].id||('m'+Date.now())):('m'+Date.now()),c,f:g('f_'),t:g('t'),m,meses:ms,s:$('#s').checked?'SÍ':'NO'}; if(ed) S.msi[ui.sheet.idx]=o; else S.msi.push(o);
+  const o={id:ed?(S.msi[ui.sheet.idx].id||('m'+Date.now())):('m'+Date.now()),c,f:g('f_'),t:g('t'),m,meses:ms,s:$('#s').checked?'SÍ':'NO'}; if(g('pp')) o.primer=g('pp'); if(ed) S.msi[ui.sheet.idx]=o; else S.msi.push(o);
   save(); ui.sheet=null; renderSheet(); render(); toast(ed?'Cambios guardados':'Compra agregada');
 }
 
